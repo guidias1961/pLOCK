@@ -239,7 +239,7 @@ const CONFIG = {
   chainId: 369,
   rpcUrl: 'https://rpc.pulsechain.com',
   explorer: 'https://scan.pulsechain.com',
-  lockerAddress: '0x9312B4b752aCeCfd7E398b52f5208d734e9C111C',
+  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d',
   deploymentBlock: 0
 };
 
@@ -363,6 +363,14 @@ function updateDevPanel(){
   }
 }
 
+async function validateLockerAddress(){
+  try{
+    const code = await state.provider.getCode(CONFIG.lockerAddress);
+    if (!code || code === '0x'){ showToast('No contract code at lockerAddress','error'); return false; }
+    return true;
+  }catch{ showToast('Failed to read lockerAddress code','error'); return false; }
+}
+
 async function connectWallet(){
   try{
     if (typeof window.ethereum==='undefined'){ showToast('Please install MetaMask or another Web3 wallet','error'); return; }
@@ -374,6 +382,7 @@ async function connectWallet(){
     state.chainId=Number(net.chainId);
     updateWalletUI();
     await ensurePulseChain();
+    if (!(await validateLockerAddress())) return;
     updateDevPanel();
   }catch(e){
     console.error('connect fail:', e);
@@ -517,7 +526,7 @@ function showGasEstimate(type, gasEstimate, gasCost){
   el.style.display='block';
 }
 
-// --- Envio codificando manualmente a calldata ---
+// manual calldata
 const lockerInterface = new ethers.Interface(LOCKER_ABI);
 async function encodeAndSend(fnName, args, fallbackGas){
   const data = lockerInterface.encodeFunctionData(fnName, args);
@@ -525,7 +534,7 @@ async function encodeAndSend(fnName, args, fallbackGas){
   return await state.signer.sendTransaction(txReq);
 }
 
-// --- CREATEs ---
+// creates
 async function createTokenLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
@@ -668,7 +677,7 @@ function clearForm(type){
   const infoId=type==='linear'?'linear-token-info': type==='lp'?'lp-info':'token-info';
   const gasId=`gas-estimate-${type}`;
   const infoEl=document.getElementById(infoId); if (infoEl) infoEl.style.display='none';
-  const gasEl=document.getElementById(gasId); if (gasEl) el.style.display='none';
+  const gasEl=document.getElementById(gasId); if (gasEl) gasEl.style.display='none';
 }
 
 async function loadMyLocks(){
