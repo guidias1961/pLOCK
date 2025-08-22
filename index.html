@@ -239,7 +239,7 @@ const CONFIG = {
   chainId: 369,
   rpcUrl: 'https://rpc.pulsechain.com',
   explorer: 'https://scan.pulsechain.com',
-  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d',
+  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d', // seu deploy
   deploymentBlock: 0
 };
 
@@ -526,15 +526,15 @@ function showGasEstimate(type, gasEstimate, gasCost){
   el.style.display='block';
 }
 
-// manual calldata
-const lockerInterface = new ethers.Interface(LOCKER_ABI);
-async function encodeAndSend(fnName, args, fallbackGas){
-  const data = lockerInterface.encodeFunctionData(fnName, args);
-  const txReq = { to: CONFIG.lockerAddress, data, value: 0n, gasLimit: fallbackGas };
-  return await state.signer.sendTransaction(txReq);
+// ------- envio robusto usando populateTransaction -------
+async function sendViaPopulate(fnName, args, gasLimit){
+  const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+  const pop = await ctr.populateTransaction[fnName](...args);
+  const tx = await state.signer.sendTransaction({ ...pop, gasLimit });
+  return tx;
 }
 
-// creates
+// ------- CREATEs -------
 async function createTokenLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
@@ -560,7 +560,7 @@ async function createTokenLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
-    const tx=await encodeAndSend('lock', params, 400000n);
+    const tx=await sendViaPopulate('lock', params, 400000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Lock created!','success');
     await loadMyLocks(); clearForm('token');
@@ -597,7 +597,7 @@ async function createLPLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
     showGasEstimate('lp', gasEstimate, gasCost);
 
-    const tx=await encodeAndSend('lockLP', params, 400000n);
+    const tx=await sendViaPopulate('lockLP', params, 400000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('LP Lock created!','success');
     await loadMyLocks(); clearForm('lp');
@@ -636,7 +636,7 @@ async function createLinearLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
     showGasEstimate('linear', gasEstimate, gasCost);
 
-    const tx=await encodeAndSend('lockLinear', params, 600000n);
+    const tx=await sendViaPopulate('lockLinear', params, 600000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Linear Lock created!','success');
     await loadMyLocks(); clearForm('linear');
@@ -787,7 +787,7 @@ async function withdrawLock(lockId){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
   try{
-    const tx = await encodeAndSend('withdraw', [lockId], 120000n);
+    const tx = await sendViaPopulate('withdraw', [lockId], 120000n);
     showToast(`Withdrawal sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Withdrawal successful!','success');
     await loadMyLocks();
