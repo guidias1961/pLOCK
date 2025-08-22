@@ -1,1035 +1,780 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>pLOCK - Professional Token Locking on PulseChain</title>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <style>
-        :root {
-            --pc-black: #0a0b0f;
-            --pc-purple: #7a3cff;
-            --pc-magenta: #ff00e0;
-            --pc-cyan: #00e5ff;
-            --pc-gray-1: #12131a;
-            --pc-gray-2: #1b1c25;
-            --pc-gray-3: #262838;
-            --pc-white: #ffffff;
-            --pc-text: #e2e8f0;
-            --pc-text-muted: #94a3b8;
-            --pc-border: #475569;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--pc-black);
-            color: var(--pc-text);
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
-
-        #particles {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -1; opacity: 0.3;
-        }
-
-        .container { max-width: 1440px; margin: 0 auto; padding: 0 20px; position: relative; z-index: 1; }
-
-        .panel {
-            background: linear-gradient(145deg, var(--pc-gray-1), var(--pc-gray-2));
-            border: 1px solid var(--pc-border);
-            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
-            box-shadow:
-                inset 2px 2px 4px rgba(255, 255, 255, 0.05),
-                inset -2px -2px 4px rgba(0, 0, 0, 0.5),
-                0 4px 16px rgba(0, 0, 0, 0.3);
-            position: relative;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            background: linear-gradient(145deg, var(--pc-gray-2), var(--pc-gray-3));
-            border: 1px solid var(--pc-border);
-            color: var(--pc-text);
-            cursor: pointer;
-            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-            transition: all 0.2s ease;
-            font-size: 14px;
-            font-weight: 500;
-            box-shadow:
-                inset 1px 1px 2px rgba(255, 255, 255, 0.1),
-                inset -1px -1px 2px rgba(0, 0, 0, 0.3);
-        }
-        .btn:hover { background: linear-gradient(145deg, var(--pc-gray-3), var(--pc-purple)); transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); box-shadow: inset 2px 2px 4px rgba(0,0,0,0.4), inset -1px -1px 2px rgba(255,255,255,0.1); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .btn-primary { background: linear-gradient(145deg, var(--pc-purple), var(--pc-magenta)); color: var(--pc-white); }
-        .btn-primary:hover { background: linear-gradient(145deg, var(--pc-magenta), var(--pc-cyan)); }
-
-        .header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 20px 0; border-bottom: 1px solid var(--pc-border);
-        }
-        .logo {
-            font-size: 24px; font-weight: 700;
-            background: linear-gradient(45deg, var(--pc-purple), var(--pc-cyan));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .wallet-info { display: flex; align-items: center; gap: 12px; }
-        .network-pill {
-            padding: 4px 12px; background: var(--pc-gray-2); border: 1px solid var(--pc-border);
-            border-radius: 16px; font-size: 12px; color: var(--pc-text-muted);
-        }
-        .network-pill.connected { background: linear-gradient(45deg, var(--pc-purple), var(--pc-cyan)); color: var(--pc-white); }
-
-        .hero { text-align: center; padding: 60px 0; }
-        .hero h1 {
-            font-size: clamp(36px, 5vw, 64px); font-weight: 700; margin-bottom: 16px;
-            background: linear-gradient(45deg, var(--pc-purple), var(--pc-cyan));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .hero p { font-size: 18px; color: var(--pc-text-muted); margin-bottom: 8px; }
-
-        .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--pc-border); }
-        .tab {
-            padding: 12px 24px; background: transparent; border: none; color: var(--pc-text-muted);
-            cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all 0.2s ease;
-        }
-        .tab:hover { color: var(--pc-text); }
-        .tab.active { color: var(--pc-cyan); border-bottom-color: var(--pc-cyan); }
-
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        .form-group { margin-bottom: 24px; }
-        .form-label { display: block; font-weight: 500; margin-bottom: 8px; color: var(--pc-text); }
-        .form-input {
-            width: 100%; padding: 16px; background: var(--pc-gray-1); border: 1px solid var(--pc-border);
-            color: var(--pc-text); font-size: 16px;
-            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-        }
-        .form-input:focus { outline: none; border-color: var(--pc-cyan); box-shadow: 0 0 0 2px rgba(0,229,255,0.2); }
-
-        .input-group { display: flex; gap: 8px; }
-        .input-group .form-input { flex: 1; }
-
-        .token-info {
-            padding: 12px 16px; background: var(--pc-gray-2); border: 1px solid var(--pc-border);
-            margin-top: 8px; font-size: 14px; color: var(--pc-text-muted);
-            clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
-        }
-
-        .locks-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-        .locks-table th, .locks-table td {
-            padding: 12px; text-align: left; border-bottom: 1px solid var(--pc-border);
-        }
-        .locks-table th { background: var(--pc-gray-2); font-weight: 500; color: var(--pc-text); }
-        .locks-table td { color: var(--pc-text-muted); }
-
-        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
-        .status-badge.active { background: rgba(255,165,0,0.2); color: #ffa500; }
-        .status-badge.unlocked { background: rgba(34,197,94,0.2); color: #22c55e; }
-
-        .modal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000;
-        }
-        .modal.show { display: flex; }
-        .modal-content { background: var(--pc-gray-1); padding: 24px; max-width: 400px; width: 90%; }
-
-        .toast {
-            position: fixed; top: 20px; right: 20px; padding: 16px 24px;
-            background: var(--pc-gray-1); border: 1px solid var(--pc-border);
-            z-index: 1001; transform: translateX(400px); transition: transform 0.3s ease;
-            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-        }
-        .toast.show { transform: translateX(0); }
-        .toast.success { border-color: #22c55e; }
-        .toast.error { border-color: #ef4444; }
-
-        .dev-panel {
-            position: fixed; bottom: 20px; left: 20px; background: var(--pc-gray-1);
-            padding: 16px; border: 1px solid var(--pc-border); font-size: 12px; z-index: 1000; display: none;
-        }
-
-        .footer { margin-top: 80px; padding: 40px 0; border-top: 1px solid var(--pc-border); text-align: center; color: var(--pc-text-muted); font-size: 14px; }
-
-        .countdown { font-family: 'Courier New', monospace; font-size: 12px; color: var(--pc-cyan); }
-        .gas-estimate { background: var(--pc-gray-3); padding: 12px; margin: 16px 0; border-left: 3px solid var(--pc-cyan); font-size: 14px; }
-
-        @media (max-width: 768px) {
-            .header { flex-direction: column; gap: 16px; }
-            .wallet-info { width: 100%; justify-content: center; }
-            .tabs { flex-wrap: wrap; }
-            .input-group { flex-direction: column; }
-            .locks-table { font-size: 14px; }
-            .locks-table th, .locks-table td { padding: 8px; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            * { animation: none !important; transition: none !important; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>pLOCK - Professional Token Locking on PulseChain</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    :root{
+      --pc-black:#0a0b0f;--pc-purple:#7a3cff;--pc-magenta:#ff00e0;--pc-cyan:#00e5ff;
+      --pc-gray-1:#12131a;--pc-gray-2:#1b1c25;--pc-gray-3:#262838;--pc-white:#fff;
+      --pc-text:#e2e8f0;--pc-text-muted:#94a3b8;--pc-border:#475569;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--pc-black);color:var(--pc-text);line-height:1.6;overflow-x:hidden}
+    #particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;opacity:.3}
+    .container{max-width:1440px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
+    .panel{
+      background:linear-gradient(145deg,var(--pc-gray-1),var(--pc-gray-2));
+      border:1px solid var(--pc-border);
+      clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+      box-shadow:inset 2px 2px 4px rgba(255,255,255,.05),inset -2px -2px 4px rgba(0,0,0,.5),0 4px 16px rgba(0,0,0,.3);
+      position:relative;
+    }
+    .btn{
+      padding:12px 24px;background:linear-gradient(145deg,var(--pc-gray-2),var(--pc-gray-3));
+      border:1px solid var(--pc-border);color:var(--pc-text);cursor:pointer;
+      clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));
+      transition:all .2s ease;font-size:14px;font-weight:500;
+      box-shadow:inset 1px 1px 2px rgba(255,255,255,.1),inset -1px -1px 2px rgba(0,0,0,.3);
+    }
+    .btn:hover{background:linear-gradient(145deg,var(--pc-gray-3),var(--pc-purple));transform:translateY(-1px)}
+    .btn:active{transform:translateY(0);box-shadow:inset 2px 2px 4px rgba(0,0,0,.4),inset -1px -1px 2px rgba(255,255,255,.1)}
+    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .btn-primary{background:linear-gradient(145deg,var(--pc-purple),var(--pc-magenta));color:var(--pc-white)}
+    .btn-primary:hover{background:linear-gradient(145deg,var(--pc-magenta),var(--pc-cyan))}
+    .header{display:flex;justify-content:space-between;align-items:center;padding:20px 0;border-bottom:1px solid var(--pc-border)}
+    .logo{font-size:24px;font-weight:700;background:linear-gradient(45deg,var(--pc-purple),var(--pc-cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .wallet-info{display:flex;align-items:center;gap:12px}
+    .network-pill{padding:4px 12px;background:var(--pc-gray-2);border:1px solid var(--pc-border);border-radius:16px;font-size:12px;color:var(--pc-text-muted)}
+    .network-pill.connected{background:linear-gradient(45deg,var(--pc-purple),var(--pc-cyan));color:var(--pc-white)}
+    .hero{text-align:center;padding:60px 0}
+    .hero h1{font-size:clamp(36px,5vw,64px);font-weight:700;margin-bottom:16px;background:linear-gradient(45deg,var(--pc-purple),var(--pc-cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero p{font-size:18px;color:var(--pc-text-muted);margin-bottom:8px}
+    .tabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--pc-border)}
+    .tab{padding:12px 24px;background:transparent;border:none;color:var(--pc-text-muted);cursor:pointer;font-size:14px;font-weight:500;border-bottom:2px solid transparent;transition:all .2s ease}
+    .tab:hover{color:var(--pc-text)} .tab.active{color:var(--pc-cyan);border-bottom-color:var(--pc-cyan)}
+    .tab-content{display:none} .tab-content.active{display:block}
+    .form-group{margin-bottom:24px}
+    .form-label{display:block;font-weight:500;margin-bottom:8px;color:var(--pc-text)}
+    .form-input{width:100%;padding:16px;background:var(--pc-gray-1);border:1px solid var(--pc-border);color:var(--pc-text);font-size:16px;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px))}
+    .form-input:focus{outline:none;border-color:var(--pc-cyan);box-shadow:0 0 0 2px rgba(0,229,255,.2)}
+    .input-group{display:flex;gap:8px}.input-group .form-input{flex:1}
+    .token-info{padding:12px 16px;background:var(--pc-gray-2);border:1px solid var(--pc-border);margin-top:8px;font-size:14px;color:var(--pc-text-muted);clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,6px 100%,0 calc(100% - 6px))}
+    .locks-table{width:100%;border-collapse:collapse;margin-top:24px}
+    .locks-table th,.locks-table td{padding:12px;text-align:left;border-bottom:1px solid var(--pc-border)}
+    .locks-table th{background:var(--pc-gray-2);font-weight:500;color:var(--pc-text)}
+    .locks-table td{color:var(--pc-text-muted)}
+    .status-badge{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500}
+    .status-badge.active{background:rgba(255,165,0,.2);color:#ffa500}
+    .status-badge.unlocked{background:rgba(34,197,94,.2);color:#22c55e}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:1000}
+    .modal.show{display:flex}
+    .modal-content{background:var(--pc-gray-1);padding:24px;max-width:400px;width:90%}
+    .toast{position:fixed;top:20px;right:20px;padding:16px 24px;background:var(--pc-gray-1);border:1px solid var(--pc-border);z-index:1001;transform:translateX(400px);transition:transform .3s ease;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px))}
+    .toast.show{transform:translateX(0)} .toast.success{border-color:#22c55e} .toast.error{border-color:#ef4444}
+    .dev-panel{position:fixed;bottom:20px;left:20px;background:var(--pc-gray-1);padding:16px;border:1px solid var(--pc-border);font-size:12px;z-index:1000;display:none}
+    .footer{margin-top:80px;padding:40px 0;border-top:1px solid var(--pc-border);text-align:center;color:var(--pc-text-muted);font-size:14px}
+    .countdown{font-family:'Courier New',monospace;font-size:12px;color:var(--pc-cyan)}
+    .gas-estimate{background:var(--pc-gray-3);padding:12px;margin:16px 0;border-left:3px solid var(--pc-cyan);font-size:14px}
+    @media (max-width:768px){
+      .header{flex-direction:column;gap:16px}
+      .wallet-info{width:100%;justify-content:center}
+      .tabs{flex-wrap:wrap}
+      .input-group{flex-direction:column}
+      .locks-table{font-size:14px}
+      .locks-table th,.locks-table td{padding:8px}
+    }
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
 </head>
 <body>
-    <canvas id="particles"></canvas>
+  <canvas id="particles"></canvas>
 
-    <div class="container">
-        <header class="header">
-            <div class="logo">pLOCK</div>
-            <div class="wallet-info">
-                <div id="network-pill" class="network-pill">Disconnected</div>
-                <button id="connect-btn" class="btn btn-primary">Connect Wallet</button>
-            </div>
-        </header>
+  <div class="container">
+    <header class="header">
+      <div class="logo">pLOCK</div>
+      <div class="wallet-info">
+        <div id="network-pill" class="network-pill">Disconnected</div>
+        <button id="connect-btn" class="btn btn-primary">Connect Wallet</button>
+      </div>
+    </header>
 
-        <section class="hero">
-            <h1>pLOCK</h1>
-            <p>Professional token locking on PulseChain.</p>
-            <p>Secure your tokens with time-based or linear vesting locks.</p>
-        </section>
+    <section class="hero">
+      <h1>pLOCK</h1>
+      <p>Professional token locking on PulseChain.</p>
+      <p>Secure your tokens with time-based or linear vesting locks.</p>
+    </section>
 
-        <main>
-            <div class="panel" style="padding: 32px;">
-                <div class="tabs">
-                    <button class="tab active" data-tab="token">Token Lock</button>
-                    <button class="tab" data-tab="lp">LP Lock</button>
-                    <button class="tab" data-tab="linear">Linear Vesting</button>
-                </div>
-
-                <div id="tab-token" class="tab-content active">
-                    <div class="form-group">
-                        <label class="form-label" for="token-address">Token Address</label>
-                        <input type="text" id="token-address" class="form-input" placeholder="0x...">
-                        <div id="token-info" class="token-info" style="display: none;"></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="token-amount">Amount</label>
-                        <div class="input-group">
-                            <input type="text" id="token-amount" class="form-input" placeholder="0.0">
-                            <button id="max-btn" class="btn">Max</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="unlock-time">Unlock Time</label>
-                        <input type="datetime-local" id="unlock-time" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="notes">Notes (optional)</label>
-                        <input type="text" id="notes" class="form-input" placeholder="Description for this lock">
-                    </div>
-                    <div id="gas-estimate-token" class="gas-estimate" style="display: none;"></div>
-                    <button id="create-token-lock" class="btn btn-primary" style="width: 100%;">Create Token Lock</button>
-                </div>
-
-                <div id="tab-lp" class="tab-content">
-                    <div class="form-group">
-                        <label class="form-label" for="lp-address">LP Token Address</label>
-                        <input type="text" id="lp-address" class="form-input" placeholder="0x...">
-                        <div id="lp-info" class="token-info" style="display: none;"></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="lp-amount">Amount</label>
-                        <div class="input-group">
-                            <input type="text" id="lp-amount" class="form-input" placeholder="0.0">
-                            <button id="lp-max-btn" class="btn">Max</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="lp-unlock-time">Unlock Time</label>
-                        <input type="datetime-local" id="lp-unlock-time" class="form-input">
-                    </div>
-                    <div id="gas-estimate-lp" class="gas-estimate" style="display: none;"></div>
-                    <button id="create-lp-lock" class="btn btn-primary" style="width: 100%;">Create LP Lock</button>
-                </div>
-
-                <div id="tab-linear" class="tab-content">
-                    <div class="form-group">
-                        <label class="form-label" for="linear-token">Token Address</label>
-                        <input type="text" id="linear-token" class="form-input" placeholder="0x...">
-                        <div id="linear-token-info" class="token-info" style="display: none;"></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="linear-amount">Amount</label>
-                        <div class="input-group">
-                            <input type="text" id="linear-amount" class="form-input" placeholder="0.0">
-                            <button id="linear-max-btn" class="btn">Max</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="start-time">Start Time</label>
-                        <input type="datetime-local" id="start-time" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="end-time">End Time</label>
-                        <input type="datetime-local" id="end-time" class="form-input">
-                    </div>
-                    <div id="gas-estimate-linear" class="gas-estimate" style="display: none;"></div>
-                    <button id="create-linear-lock" class="btn btn-primary" style="width: 100%;">Create Linear Lock</button>
-                </div>
-            </div>
-
-            <section style="margin-top: 48px;">
-                <h2 style="margin-bottom: 24px; font-size: 24px;">Your Locks</h2>
-                <div class="panel" style="padding: 24px;">
-                    <div style="margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-                        <input type="text" id="search-locks" class="form-input" placeholder="Search by token..." style="max-width: 300px;">
-                        <button id="refresh-locks" class="btn">Refresh</button>
-                    </div>
-                    <div style="overflow-x: auto;">
-                        <table class="locks-table">
-                            <thead>
-                                <tr>
-                                    <th>Lock ID</th>
-                                    <th>Asset</th>
-                                    <th>Amount</th>
-                                    <th>Unlock Time</th>
-                                    <th>Beneficiary</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="locks-table-body">
-                                <tr>
-                                    <td colspan="7" style="text-align: center; padding: 40px;">Connect wallet to view your locks</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <footer class="footer">
-            <p>pLOCK v1.0 | Professional token locking on PulseChain</p>
-            <p style="margin-top: 8px;">Links • Documentation • Support</p>
-        </footer>
-    </div>
-
-    <div id="network-modal" class="modal">
-        <div class="modal-content panel" style="padding: 24px;">
-            <h3 style="margin-bottom: 16px;">Switch to PulseChain</h3>
-            <p style="margin-bottom: 24px; color: var(--pc-text-muted);">This app requires PulseChain network. Please switch to PulseChain to continue.</p>
-            <button id="switch-network" class="btn btn-primary" style="width: 100%;">Switch Network</button>
+    <main>
+      <div class="panel" style="padding:32px;">
+        <div class="tabs">
+          <button class="tab active" data-tab="token">Token Lock</button>
+          <button class="tab" data-tab="lp">LP Lock</button>
+          <button class="tab" data-tab="linear">Linear Vesting</button>
         </div>
+
+        <!-- TOKEN LOCK -->
+        <div id="tab-token" class="tab-content active">
+          <div class="form-group">
+            <label class="form-label" for="token-address">Token Address</label>
+            <input id="token-address" class="form-input" placeholder="0x..."/>
+            <div id="token-info" class="token-info" style="display:none;"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="token-amount">Amount</label>
+            <div class="input-group">
+              <input id="token-amount" class="form-input" placeholder="0.0"/>
+              <button id="max-btn" class="btn">Max</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="unlock-time">Unlock Time</label>
+            <input type="datetime-local" id="unlock-time" class="form-input"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="notes">Notes (optional)</label>
+            <input id="notes" class="form-input" placeholder="Description for this lock"/>
+          </div>
+          <div id="gas-estimate-token" class="gas-estimate" style="display:none;"></div>
+          <button id="create-token-lock" class="btn btn-primary" style="width:100%;">Create Token Lock</button>
+        </div>
+
+        <!-- LP LOCK -->
+        <div id="tab-lp" class="tab-content">
+          <div class="form-group">
+            <label class="form-label" for="lp-address">LP Token Address</label>
+            <input id="lp-address" class="form-input" placeholder="0x..."/>
+            <div id="lp-info" class="token-info" style="display:none;"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="lp-amount">Amount</label>
+            <div class="input-group">
+              <input id="lp-amount" class="form-input" placeholder="0.0"/>
+              <button id="lp-max-btn" class="btn">Max</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="lp-unlock-time">Unlock Time</label>
+            <input type="datetime-local" id="lp-unlock-time" class="form-input"/>
+          </div>
+          <div id="gas-estimate-lp" class="gas-estimate" style="display:none;"></div>
+          <button id="create-lp-lock" class="btn btn-primary" style="width:100%;">Create LP Lock</button>
+        </div>
+
+        <!-- LINEAR VESTING -->
+        <div id="tab-linear" class="tab-content">
+          <div class="form-group">
+            <label class="form-label" for="linear-token">Token Address</label>
+            <input id="linear-token" class="form-input" placeholder="0x..."/>
+            <div id="linear-token-info" class="token-info" style="display:none;"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="linear-amount">Amount</label>
+            <div class="input-group">
+              <input id="linear-amount" class="form-input" placeholder="0.0"/>
+              <button id="linear-max-btn" class="btn">Max</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="start-time">Start Time</label>
+            <input type="datetime-local" id="start-time" class="form-input"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="end-time">End Time</label>
+            <input type="datetime-local" id="end-time" class="form-input"/>
+          </div>
+          <div id="gas-estimate-linear" class="gas-estimate" style="display:none;"></div>
+          <button id="create-linear-lock" class="btn btn-primary" style="width:100%;">Create Linear Lock</button>
+        </div>
+      </div>
+
+      <section style="margin-top:48px;">
+        <h2 style="margin-bottom:24px;font-size:24px;">Your Locks</h2>
+        <div class="panel" style="padding:24px;">
+          <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
+            <input id="search-locks" class="form-input" placeholder="Search by token..." style="max-width:300px;"/>
+            <button id="refresh-locks" class="btn">Refresh</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="locks-table">
+              <thead>
+                <tr>
+                  <th>Lock ID</th>
+                  <th>Asset</th>
+                  <th>Amount</th>
+                  <th>Unlock Time</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="locks-table-body">
+                <tr>
+                  <td colspan="6" style="text-align:center;padding:40px;">Connect wallet to view your locks</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>pLOCK v1.0 | Professional token locking on PulseChain</p>
+      <p style="margin-top:8px;">Links • Documentation • Support</p>
+    </footer>
+  </div>
+
+  <div id="network-modal" class="modal">
+    <div class="modal-content panel" style="padding:24px;">
+      <h3 style="margin-bottom:16px;">Switch to PulseChain</h3>
+      <p style="margin-bottom:24px;color:var(--pc-text-muted);">This app requires PulseChain network. Please switch to PulseChain to continue.</p>
+      <button id="switch-network" class="btn btn-primary" style="width:100%;">Switch Network</button>
     </div>
+  </div>
 
-    <div id="toast" class="toast panel"></div>
+  <div id="toast" class="toast panel"></div>
 
-    <div id="dev-panel" class="dev-panel panel">
-        <div>Provider: <span id="dev-provider">None</span></div>
-        <div>Chain ID: <span id="dev-chain">None</span></div>
-        <div>Last Error: <span id="dev-error">None</span></div>
-    </div>
+  <div id="dev-panel" class="dev-panel panel">
+    <div>Provider: <span id="dev-provider">None</span></div>
+    <div>Chain ID: <span id="dev-chain">None</span></div>
+    <div>Last Error: <span id="dev-error">None</span></div>
+  </div>
 
-    <script>
-        const CONFIG = {
-            chainId: 369,
-            rpcUrl: 'https://rpc.pulsechain.com',
-            explorer: 'https://scan.pulsechain.com',
-            lockerAddress: '0x0000000000000000000000000000000000000000', // SET YOUR DEPLOYED CONTRACT ADDRESS
-            deploymentBlock: 0 // optionally set a recent block for faster event scans
+  <script>
+const CONFIG = {
+  chainId: 369,
+  rpcUrl: 'https://rpc.pulsechain.com',
+  explorer: 'https://scan.pulsechain.com',
+  lockerAddress: '0x9312B4b752aCeCfd7E398b52f5208d734e9C111C',
+  deploymentBlock: 0 // opcional: coloque aqui o bloco do deploy p/ acelerar
+};
+
+
+    // Permite setar o contrato via querystring e persistir
+    (function bootLockerAddr(){
+      try{
+        const q = new URLSearchParams(location.search).get('locker');
+        const saved = localStorage.getItem('plock.lockerAddress');
+        const pick = q && ethers.isAddress(q) ? q : (saved && ethers.isAddress(saved) ? saved : null);
+        if (pick){ CONFIG.lockerAddress = pick; localStorage.setItem('plock.lockerAddress', pick); }
+      }catch(e){}
+    })();
+
+    // ABI compatível com o contrato sugerido (mantém beneficiary no evento/assinatura, mas o contrato exige msg.sender)
+    const LOCKER_ABI = [
+      "function lock(address token, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
+      "function lockLinear(address token, uint256 amount, uint64 start, uint64 end, address beneficiary) returns (uint256 lockId)",
+      "function lockLP(address pair, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
+      "function getLock(uint256 lockId) view returns (address token, uint256 amount, uint64 unlockTime, address owner, address beneficiary, bool withdrawn)",
+      "function withdraw(uint256 lockId)",
+      "event Locked(uint256 indexed lockId, address indexed token, address indexed owner, uint256 amount, uint64 unlockTime, address beneficiary)",
+      "event Withdrawn(uint256 indexed lockId, address indexed token, address indexed owner)"
+    ];
+
+    const ERC20_ABI = [
+      "function name() view returns (string)",
+      "function symbol() view returns (string)",
+      "function decimals() view returns (uint8)",
+      "function balanceOf(address) view returns (uint256)",
+      "function allowance(address owner, address spender) view returns (uint256)",
+      "function approve(address spender, uint256 amount) returns (bool)"
+    ];
+
+    const PAIR_ABI = [
+      "function token0() view returns (address)",
+      "function token1() view returns (address)",
+      "function name() view returns (string)",
+      "function symbol() view returns (string)",
+      "function decimals() view returns (uint8)",
+      "function balanceOf(address) view returns (uint256)"
+    ];
+
+    const state = {
+      provider:null, signer:null, account:null, chainId:null,
+      locks:[], tokenMetadata:new Map(), countdownIntervals:new Set()
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initParticles();
+      setupEventListeners();
+      updateDevPanel();
+
+      if (window.ethereum){
+        try{
+          const accs = await window.ethereum.request({ method:'eth_accounts' });
+          if (accs && accs.length) await connectWallet();
+        }catch{}
+      }
+    });
+
+    async function initParticles(){
+      try{
+        await tsParticles.load("particles",{
+          fullScreen:false,
+          particles:{
+            number:{ value:50 }, color:{ value:["#7a3cff","#ff00e0","#00e5ff"] },
+            shape:{ type:"circle" }, opacity:{ value:.3 }, size:{ value:2 },
+            move:{ enable:true, speed:.5, direction:"none", random:true, straight:false, outModes:"out" },
+            links:{ enable:true, distance:150, color:"#7a3cff", opacity:.2, width:1 }
+          },
+          interactivity:{ detectsOn:"window", events:{ onHover:{ enable:true, mode:"repulse" }, resize:true },
+          modes:{ repulse:{ distance:100, duration:.4 } } }, detectRetina:true
+        });
+      }catch(e){ console.error('Particles init fail:', e); }
+    }
+
+    function setupEventListeners(){
+      document.querySelectorAll('.tab').forEach(tab=>{
+        tab.addEventListener('click',()=>switchTab(tab.dataset.tab));
+      });
+
+      document.getElementById('token-address').addEventListener('blur',()=>readTokenInfo('token'));
+      document.getElementById('lp-address').addEventListener('blur',()=>readTokenInfo('lp'));
+      document.getElementById('linear-token').addEventListener('blur',()=>readTokenInfo('linear'));
+
+      document.getElementById('max-btn').addEventListener('click',()=>setMaxAmount('token'));
+      document.getElementById('lp-max-btn').addEventListener('click',()=>setMaxAmount('lp'));
+      document.getElementById('linear-max-btn').addEventListener('click',()=>setMaxAmount('linear'));
+
+      document.getElementById('create-token-lock').addEventListener('click',createTokenLock);
+      document.getElementById('create-lp-lock').addEventListener('click',createLPLock);
+      document.getElementById('create-linear-lock').addEventListener('click',createLinearLock);
+
+      document.getElementById('refresh-locks').addEventListener('click',loadMyLocks);
+      document.getElementById('search-locks').addEventListener('input',filterLocks);
+
+      document.getElementById('network-modal').addEventListener('click',(e)=>{
+        if (e.target.id==='network-modal') e.target.classList.remove('show');
+      });
+
+      if (typeof lucide!=='undefined'){ lucide.createIcons(); }
+    }
+
+    function switchTab(name){
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(tc=>tc.classList.remove('active'));
+      document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+      document.getElementById(`tab-${name}`).classList.add('active');
+    }
+
+    function showToast(msg, type='info'){
+      const t=document.getElementById('toast');
+      t.textContent=msg; t.className=`toast panel ${type}`; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), 4000);
+    }
+
+    function updateDevPanel(){
+      if (new URLSearchParams(location.search).get('dev')==='1'){
+        const dp=document.getElementById('dev-panel'); dp.style.display='block';
+        document.getElementById('dev-provider').textContent=state.provider?'Connected':'None';
+        document.getElementById('dev-chain').textContent=state.chainId||'None';
+      }
+    }
+
+    async function connectWallet(){
+      try{
+        if (typeof window.ethereum==='undefined'){ showToast('Please install MetaMask or another Web3 wallet','error'); return; }
+        state.provider=new ethers.BrowserProvider(window.ethereum);
+        await state.provider.send('eth_requestAccounts',[]);
+        state.signer=await state.provider.getSigner();
+        state.account=await state.signer.getAddress();
+        const net=await state.provider.getNetwork();
+        state.chainId=Number(net.chainId);
+        updateWalletUI();
+        await ensurePulseChain();
+        updateDevPanel();
+      }catch(e){
+        console.error('connect fail:', e);
+        showToast('Failed to connect wallet','error');
+        document.getElementById('dev-error').textContent=e.message;
+      }
+    }
+
+    async function disconnectWallet(){
+      state.provider=null; state.signer=null; state.account=null; state.chainId=null;
+      updateWalletUI(); updateDevPanel();
+    }
+
+    function updateWalletUI(){
+      const btn=document.getElementById('connect-btn');
+      const pill=document.getElementById('network-pill');
+      if (state.account){
+        btn.textContent=`${state.account.slice(0,6)}...${state.account.slice(-4)}`;
+        btn.onclick=disconnectWallet;
+        pill.textContent=state.chainId===CONFIG.chainId?'PulseChain':`Chain ${state.chainId}`;
+        pill.className=`network-pill ${state.chainId===CONFIG.chainId?'connected':''}`;
+        loadMyLocks();
+      }else{
+        btn.textContent='Connect Wallet'; btn.onclick=connectWallet;
+        pill.textContent='Disconnected'; pill.className='network-pill';
+        renderLocksTable([]);
+      }
+    }
+
+    async function ensurePulseChain(){
+      if (Number(state.chainId)===CONFIG.chainId) return true;
+      const modal=document.getElementById('network-modal'); modal.classList.add('show');
+      const targetHex=ethers.toBeHex(CONFIG.chainId);
+      return new Promise((resolve)=>{
+        document.getElementById('switch-network').onclick=async ()=>{
+          try{
+            await state.provider.send('wallet_switchEthereumChain',[{ chainId:targetHex }]);
+            modal.classList.remove('show');
+            const net=await state.provider.getNetwork();
+            state.chainId=Number(net.chainId);
+            updateWalletUI(); resolve(true);
+          }catch(err){
+            if (err.code===4902){
+              try{
+                await state.provider.send('wallet_addEthereumChain',[{
+                  chainId:targetHex, chainName:'PulseChain',
+                  nativeCurrency:{ name:'Pulse', symbol:'PLS', decimals:18 },
+                  rpcUrls:[CONFIG.rpcUrl], blockExplorerUrls:[CONFIG.explorer]
+                }]);
+                modal.classList.remove('show');
+                const net=await state.provider.getNetwork();
+                state.chainId=Number(net.chainId);
+                updateWalletUI(); resolve(true);
+              }catch(addErr){ showToast('Failed to add PulseChain network','error'); resolve(false); }
+            }else{ showToast('Failed to switch network','error'); resolve(false); }
+          }
         };
+      });
+    }
 
-        const LOCKER_ABI = [
-            "function lock(address token, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
-            "function lockLinear(address token, uint256 amount, uint64 start, uint64 end, address beneficiary) returns (uint256 lockId)",
-            "function lockLP(address pair, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
-            "function getLock(uint256 lockId) view returns (address token, uint256 amount, uint64 unlockTime, address owner, address beneficiary, bool withdrawn)",
-            "function withdraw(uint256 lockId)",
-            "event Locked(uint256 indexed lockId, address indexed token, address indexed owner, uint256 amount, uint64 unlockTime, address beneficiary)",
-            "event Withdrawn(uint256 indexed lockId, address indexed token, address indexed owner)"
-        ];
+    async function readTokenMeta(address){
+      if (!ethers.isAddress(address)) throw new Error('Invalid address');
+      const erc=new ethers.Contract(address, ERC20_ABI, state.provider);
+      const [name,symbol,decimals]=await Promise.all([erc.name(),erc.symbol(),erc.decimals()]);
 
-        const ERC20_ABI = [
-            "function name() view returns (string)",
-            "function symbol() view returns (string)",
-            "function decimals() view returns (uint8)",
-            "function balanceOf(address) view returns (uint256)",
-            "function allowance(address owner, address spender) view returns (uint256)",
-            "function approve(address spender, uint256 amount) returns (bool)"
-        ];
+      // tenta ler par LP
+      let isLP=false, pairInfo=null;
+      try{
+        const pair=new ethers.Contract(address, PAIR_ABI, state.provider);
+        const [t0,t1]=await Promise.all([pair.token0(), pair.token1()]);
+        const t0c=new ethers.Contract(t0, ERC20_ABI, state.provider);
+        const t1c=new ethers.Contract(t1, ERC20_ABI, state.provider);
+        const [s0,s1]=await Promise.all([t0c.symbol(), t1c.symbol()]);
+        pairInfo={ token0Symbol:s0, token1Symbol:s1 }; isLP=true;
+      }catch{}
 
-        const PAIR_ABI = [
-            "function token0() view returns (address)",
-            "function token1() view returns (address)",
-            "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-            "function name() view returns (string)",
-            "function symbol() view returns (string)",
-            "function decimals() view returns (uint8)",
-            "function balanceOf(address) view returns (uint256)"
-        ];
+      const md={ name,symbol,decimals,isLP,pairInfo };
+      state.tokenMetadata.set(address.toLowerCase(), md);
+      return md;
+    }
 
-        const state = {
-            provider: null,
-            signer: null,
-            account: null,
-            chainId: null,
-            locks: [],
-            tokenMetadata: new Map(),
-            countdownIntervals: new Set()
-        };
+    async function readTokenInfo(type){
+      const addressInput=document.getElementById(type==='linear'?'linear-token': type==='lp'?'lp-address':'token-address');
+      const infoDiv=document.getElementById(type==='linear'?'linear-token-info': type==='lp'?'lp-info':'token-info');
+      const address=(addressInput.value||'').trim();
+      if (!address){ infoDiv.style.display='none'; return; }
+      try{
+        const md=await readTokenMeta(address);
+        let txt=`${md.name} (${md.symbol}) - ${md.decimals} decimals`;
+        if (md.isLP && md.pairInfo) txt+=` | Pair: ${md.pairInfo.token0Symbol}/${md.pairInfo.token1Symbol}`;
+        infoDiv.textContent=txt; infoDiv.style.display='block';
+      }catch(e){ infoDiv.textContent=`Error: ${e.message}`; infoDiv.style.display='block'; }
+    }
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            await initParticles();
-            setupEventListeners();
-            updateDevPanel();
+    async function setMaxAmount(type){
+      if (!state.account||!state.provider){ showToast('Please connect wallet first','error'); return; }
+      const addrInput=document.getElementById(type==='linear'?'linear-token': type==='lp'?'lp-address':'token-address');
+      const amtInput=document.getElementById(type==='linear'?'linear-amount': type==='lp'?'lp-amount':'token-amount');
+      const address=(addrInput.value||'').trim();
+      if (!address||!ethers.isAddress(address)){ showToast('Please enter a valid token address first','error'); return; }
+      try{
+        const c=new ethers.Contract(address, ERC20_ABI, state.provider);
+        const [bal,dec]=await Promise.all([c.balanceOf(state.account), c.decimals()]);
+        amtInput.value=ethers.formatUnits(bal, dec);
+      }catch{ showToast('Failed to read balance','error'); }
+    }
 
-            if (window.ethereum) {
-                try {
-                    const accs = await window.ethereum.request({ method: 'eth_accounts' });
-                    if (accs && accs.length) await connectWallet();
-                } catch {}
-            }
+    async function checkAndApprove(tokenAddress, amount, spender){
+      try{
+        const c=new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
+        const dec=await c.decimals();
+        const amountWei=ethers.parseUnits(amount, dec);
+        const allowance=await c.allowance(state.account, spender);
+        if (allowance < amountWei){
+          showToast('Approval required...','info');
+          const tx=await c.approve(spender, amountWei);
+          await tx.wait(); await new Promise(r=>setTimeout(r,600));
+          showToast('Approval successful','success');
+        }
+        return true;
+      }catch(e){ showToast(`Approval failed: ${e.message}`,'error'); return false; }
+    }
+
+    async function estimateGasForLock(type, params){
+      try{
+        const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+        let gas;
+        if (type==='token') gas=await ctr.estimateGas.lock(...params);
+        else if (type==='lp') gas=await ctr.estimateGas.lockLP(...params);
+        else gas=await ctr.estimateGas.lockLinear(...params);
+        const fee=await state.provider.getFeeData();
+        const priceWei=fee.maxFeePerGas ?? fee.gasPrice;
+        if (priceWei==null) return { gasEstimate:gas, gasCost:'N/A' };
+        const total=gas*priceWei;
+        return { gasEstimate:gas, gasCost:ethers.formatEther(total) };
+      }catch(e){ console.error('estimate fail:', e); return { gasEstimate:200000n, gasCost:'0.002' }; }
+    }
+
+    function showGasEstimate(type, gasEstimate, gasCost){
+      const el=document.getElementById(`gas-estimate-${type}`);
+      const str=typeof gasEstimate==='bigint'?gasEstimate.toString():String(gasEstimate??'');
+      const n=Number(str);
+      el.innerHTML=`<strong>Gas Estimate:</strong> ${Number.isFinite(n)?n.toLocaleString():str} units<br><strong>Estimated Cost:</strong> ${gasCost==='N/A'?'N/A':`~${gasCost} PLS`}`;
+      el.style.display='block';
+    }
+
+    async function createTokenLock(){
+      if (!state.account){ showToast('Please connect wallet','error'); return; }
+      if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+
+      const address=document.getElementById('token-address').value.trim();
+      const amount=document.getElementById('token-amount').value.trim();
+      const unlockTime=document.getElementById('unlock-time').value;
+      if (!validateInputs(address, amount, unlockTime)) return;
+
+      try{
+        const btn=document.getElementById('create-token-lock'); btn.disabled=true; btn.textContent='Creating...';
+        const md=await readTokenMeta(address);
+        const amountWei=ethers.parseUnits(amount, md.decimals);
+        const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
+        const unlockUnix=Math.floor(ts/1000);
+        const params=[address, amountWei, unlockUnix, state.account];
+
+        const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
+        showGasEstimate('token', gasEstimate, gasCost);
+
+        const ok=await checkAndApprove(address, amount, CONFIG.lockerAddress); if (!ok) return;
+
+        const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+        const tx=await ctr.lock(...params);
+        showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
+        await tx.wait(); showToast('Lock created!','success');
+        await loadMyLocks(); clearForm('token');
+      }catch(e){ showToast(`Failed to create lock: ${e.message}`,'error'); document.getElementById('dev-error').textContent=e.message; }
+      finally{ const btn=document.getElementById('create-token-lock'); btn.disabled=false; btn.textContent='Create Token Lock'; }
+    }
+
+    async function createLPLock(){
+      if (!state.account){ showToast('Please connect wallet','error'); return; }
+      if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+
+      const address=document.getElementById('lp-address').value.trim();
+      const amount=document.getElementById('lp-amount').value.trim();
+      const unlockTime=document.getElementById('lp-unlock-time').value;
+      if (!validateInputs(address, amount, unlockTime)) return;
+
+      try{
+        const btn=document.getElementById('create-lp-lock'); btn.disabled=true; btn.textContent='Creating...';
+        const md=await readTokenMeta(address);
+        const amountWei=ethers.parseUnits(amount, md.decimals);
+        const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
+        const unlockUnix=Math.floor(ts/1000);
+        const params=[address, amountWei, unlockUnix, state.account];
+
+        const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
+        showGasEstimate('lp', gasEstimate, gasCost);
+
+        const ok=await checkAndApprove(address, amount, CONFIG.lockerAddress); if (!ok) return;
+
+        const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+        const tx=await ctr.lockLP(...params);
+        showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
+        await tx.wait(); showToast('LP Lock created!','success');
+        await loadMyLocks(); clearForm('lp');
+      }catch(e){ showToast(`Failed to create LP lock: ${e.message}`,'error'); document.getElementById('dev-error').textContent=e.message; }
+      finally{ const btn=document.getElementById('create-lp-lock'); btn.disabled=false; btn.textContent='Create LP Lock'; }
+    }
+
+    async function createLinearLock(){
+      if (!state.account){ showToast('Please connect wallet','error'); return; }
+      if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+
+      const address=document.getElementById('linear-token').value.trim();
+      const amount=document.getElementById('linear-amount').value.trim();
+      const startTime=document.getElementById('start-time').value;
+      const endTime=document.getElementById('end-time').value;
+      if (!validateLinearInputs(address, amount, startTime, endTime)) return;
+
+      try{
+        const btn=document.getElementById('create-linear-lock'); btn.disabled=true; btn.textContent='Creating...';
+        const md=await readTokenMeta(address);
+        const amountWei=ethers.parseUnits(amount, md.decimals);
+        const tStart=Date.parse(startTime); const tEnd=Date.parse(endTime);
+        if (!Number.isFinite(tStart)||!Number.isFinite(tEnd)){ showToast('Invalid start or end time','error'); return; }
+        const startUnix=Math.floor(tStart/1000), endUnix=Math.floor(tEnd/1000);
+        const params=[address, amountWei, startUnix, endUnix, state.account];
+
+        const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
+        showGasEstimate('linear', gasEstimate, gasCost);
+
+        const ok=await checkAndApprove(address, amount, CONFIG.lockerAddress); if (!ok) return;
+
+        const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+        const tx=await ctr.lockLinear(...params);
+        showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
+        await tx.wait(); showToast('Linear Lock created!','success');
+        await loadMyLocks(); clearForm('linear');
+      }catch(e){ showToast(`Failed to create linear lock: ${e.message}`,'error'); document.getElementById('dev-error').textContent=e.message; }
+      finally{ const btn=document.getElementById('create-linear-lock'); btn.disabled=false; btn.textContent='Create Linear Lock'; }
+    }
+
+    function validateInputs(address, amount, unlockTime){
+      if (!ethers.isAddress(address)){ showToast('Invalid token address','error'); return false; }
+      if (!amount || parseFloat(amount)<=0){ showToast('Invalid amount','error'); return false; }
+      const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return false; }
+      if (ts<=Date.now()){ showToast('Unlock time must be in the future','error'); return false; }
+      return true;
+    }
+
+    function validateLinearInputs(address, amount, start, end){
+      if (!ethers.isAddress(address)){ showToast('Invalid token address','error'); return false; }
+      if (!amount || parseFloat(amount)<=0){ showToast('Invalid amount','error'); return false; }
+      const tsS=Date.parse(start), tsE=Date.parse(end);
+      if (!Number.isFinite(tsS)||!Number.isFinite(tsE)){ showToast('Invalid start or end time','error'); return false; }
+      if (tsS<=Date.now()){ showToast('Start time must be in the future','error'); return false; }
+      if (tsS>=tsE){ showToast('End time must be after start time','error'); return false; }
+      return true;
+    }
+
+    function clearForm(type){
+      const fields={
+        token:['token-address','token-amount','unlock-time','notes'],
+        lp:['lp-address','lp-amount','lp-unlock-time'],
+        linear:['linear-token','linear-amount','start-time','end-time']
+      };
+      fields[type].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
+      const infoId=type==='linear'?'linear-token-info': type==='lp'?'lp-info':'token-info';
+      const gasId=`gas-estimate-${type}`;
+      const infoEl=document.getElementById(infoId); if (infoEl) infoEl.style.display='none';
+      const gasEl=document.getElementById(gasId); if (gasEl) gasEl.style.display='none';
+    }
+
+    async function loadMyLocks(){
+      if (!state.account || !CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) return;
+      try{
+        const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.provider);
+        const latest=await state.provider.getBlockNumber();
+        const from=Math.max(0, CONFIG.deploymentBlock||0);
+
+        const f=ctr.filters.Locked(null, null, state.account);
+        const evs=await ctr.queryFilter(f, from, latest);
+
+        const locks=evs.map(ev=>{
+          const a=ev.args;
+          return {
+            lockId:Number(a.lockId),
+            token:a.token,
+            amount:a.amount,
+            unlockTime:Number(a.unlockTime),
+            owner:a.owner,
+            withdrawn:false,
+            txHash:ev.log.transactionHash
+          };
         });
 
-        async function initParticles() {
-            try {
-                await tsParticles.load("particles", {
-                    fullScreen: false,
-                    particles: {
-                        number: { value: 50 },
-                        color: { value: ["#7a3cff", "#ff00e0", "#00e5ff"] },
-                        shape: { type: "circle" },
-                        opacity: { value: 0.3 },
-                        size: { value: 2 },
-                        move: { enable: true, speed: 0.5, direction: "none", random: true, straight: false, outModes: "out" },
-                        links: { enable: true, distance: 150, color: "#7a3cff", opacity: 0.2, width: 1 }
-                    },
-                    interactivity: {
-                        detectsOn: "window",
-                        events: { onHover: { enable: true, mode: "repulse" }, resize: true },
-                        modes: { repulse: { distance: 100, duration: 0.4 } }
-                    },
-                    detectRetina: true
-                });
-            } catch (error) {
-                console.error('Failed to initialize particles:', error);
-            }
-        }
+        const fw=ctr.filters.Withdrawn(null, null, state.account);
+        const w=await ctr.queryFilter(fw, from, latest);
+        const setW=new Set(w.map(e=>Number(e.args.lockId)));
+        locks.forEach(l=>{ if (setW.has(l.lockId)) l.withdrawn=true; });
+
+        state.locks=locks;
+
+        const uniq=Array.from(new Set(locks.map(l=>l.token.toLowerCase())));
+        await Promise.all(uniq.map(addr=>{
+          if (!state.tokenMetadata.has(addr)) return readTokenMeta(addr).catch(()=>{});
+        }));
+
+        renderLocksTable(state.locks);
+      }catch(e){ console.error('loadMyLocks fail:', e); showToast('Failed to load locks','error'); }
+    }
+
+    function renderLocksTable(locks){
+      const tbody=document.getElementById('locks-table-body');
+      if (!locks.length){
+        tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:40px;">No locks found</td></tr>';
+        return;
+      }
+      tbody.innerHTML=locks.map(lock=>{
+        const md=state.tokenMetadata.get(lock.token?.toLowerCase()) || { symbol:'Unknown', decimals:18 };
+        let amount='0'; try{ amount=ethers.formatUnits(lock.amount||0, md.decimals); }catch{}
+        const unlock=new Date((lock.unlockTime||0)*1000);
+        const now=new Date();
+        const isUnlocked=now>=unlock;
+        const canWithdraw=isUnlocked && lock.owner?.toLowerCase()===state.account?.toLowerCase() && !lock.withdrawn;
+        const txLink=lock.txHash && lock.txHash.startsWith('0x') ? `<a href="${CONFIG.explorer}/tx/${lock.txHash}" target="_blank" class="btn" style="margin-left:8px;">View Tx</a>` : '';
+        return `
+          <tr>
+            <td>#${lock.lockId}</td>
+            <td>${md.symbol}</td>
+            <td>${Number.parseFloat(amount).toLocaleString()}</td>
+            <td>
+              <div>${unlock.toLocaleDateString()} ${unlock.toLocaleTimeString()}</div>
+              <div class="countdown" data-unlock="${lock.unlockTime}">
+                ${isUnlocked ? 'Unlocked' : getTimeUntil(lock.unlockTime)}
+              </div>
+            </td>
+            <td>
+              <span class="status-badge ${lock.withdrawn ? 'withdrawn' : isUnlocked ? 'unlocked' : 'active'}">
+                ${lock.withdrawn ? 'Withdrawn' : isUnlocked ? 'Unlocked' : 'Locked'}
+              </span>
+            </td>
+            <td>
+              ${canWithdraw ? `<button class="btn" onclick="withdrawLock(${lock.lockId})">Withdraw</button>` : ''}
+              ${txLink}
+            </td>
+          </tr>
+        `;
+      }).join('');
+      startCountdownTimers();
+    }
+
+    function getTimeUntil(unlockTime){
+      const now=new Date(); const unlock=new Date(unlockTime*1000); const diff=unlock-now;
+      if (diff<=0) return 'Unlocked';
+      const days=Math.floor(diff/(1000*60*60*24));
+      const hours=Math.floor((diff%(1000*60*60*24))/(1000*60*60));
+      const minutes=Math.floor((diff%(1000*60*60))/(1000*60));
+      if (days>0) return `${days}d ${hours}h`;
+      if (hours>0) return `${hours}h ${minutes}m`;
+      return `${minutes}m`;
+    }
+
+    function startCountdownTimers(){
+      state.countdownIntervals.forEach(i=>clearInterval(i)); state.countdownIntervals.clear();
+      document.querySelectorAll('.countdown').forEach(el=>{
+        const t=parseInt(el.dataset.unlock);
+        const it=setInterval(()=>{
+          const txt=getTimeUntil(t);
+          el.textContent=txt;
+          if (txt==='Unlocked'){ clearInterval(it); state.countdownIntervals.delete(it); loadMyLocks(); }
+        }, 60000);
+        state.countdownIntervals.add(it);
+      });
+    }
+
+    async function withdrawLock(lockId){
+      if (!state.account){ showToast('Please connect wallet','error'); return; }
+      if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+      try{
+        const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+        const tx=await ctr.withdraw(lockId);
+        showToast(`Withdrawal sent: ${tx.hash.slice(0,10)}...`,'info');
+        await tx.wait(); showToast('Withdrawal successful!','success');
+        await loadMyLocks();
+      }catch(e){ showToast(`Withdrawal failed: ${e.message}`,'error'); }
+    }
+
+    function filterLocks(){
+      const term=(document.getElementById('search-locks').value||'').toLowerCase();
+      if (!term){ renderLocksTable(state.locks); return; }
+      const filtered=state.locks.filter(l=>{
+        const md=state.tokenMetadata.get(l.token?.toLowerCase()) || { symbol:'Unknown' };
+        return md.symbol.toLowerCase().includes(term) || l.token.toLowerCase().includes(term);
+      });
+      renderLocksTable(filtered);
+    }
 
-        function setupEventListeners() {
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-            });
-
-            document.getElementById('token-address').addEventListener('blur', () => readTokenInfo('token'));
-            document.getElementById('lp-address').addEventListener('blur', () => readTokenInfo('lp'));
-            document.getElementById('linear-token').addEventListener('blur', () => readTokenInfo('linear'));
-
-            document.getElementById('max-btn').addEventListener('click', () => setMaxAmount('token'));
-            document.getElementById('lp-max-btn').addEventListener('click', () => setMaxAmount('lp'));
-            document.getElementById('linear-max-btn').addEventListener('click', () => setMaxAmount('linear'));
-
-            document.getElementById('create-token-lock').addEventListener('click', createTokenLock);
-            document.getElementById('create-lp-lock').addEventListener('click', createLPLock);
-            document.getElementById('create-linear-lock').addEventListener('click', createLinearLock);
-
-            document.getElementById('refresh-locks').addEventListener('click', loadMyLocks);
-            document.getElementById('search-locks').addEventListener('input', filterLocks);
-
-            document.getElementById('network-modal').addEventListener('click', (e) => {
-                if (e.target.id === 'network-modal') e.target.classList.remove('show');
-            });
-
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-        }
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-            document.getElementById(`tab-${tabName}`).classList.add('active');
-        }
-
-        function showToast(message, type = 'info') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast panel ${type}`;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 4000);
-        }
-
-        function updateDevPanel() {
-            if (new URLSearchParams(window.location.search).get('dev') === '1') {
-                const devPanel = document.getElementById('dev-panel');
-                devPanel.style.display = 'block';
-                document.getElementById('dev-provider').textContent = state.provider ? 'Connected' : 'None';
-                document.getElementById('dev-chain').textContent = state.chainId || 'None';
-            }
-        }
-
-        async function connectWallet() {
-            try {
-                if (typeof window.ethereum === 'undefined') {
-                    showToast('Please install MetaMask or another Web3 wallet', 'error');
-                    return;
-                }
-
-                state.provider = new ethers.BrowserProvider(window.ethereum);
-                await state.provider.send('eth_requestAccounts', []);
-                state.signer = await state.provider.getSigner();
-                state.account = await state.signer.getAddress();
-
-                const network = await state.provider.getNetwork();
-                state.chainId = Number(network.chainId);
-
-                updateWalletUI();
-                await ensurePulseChain();
-                updateDevPanel();
-            } catch (error) {
-                console.error('Connection failed:', error);
-                showToast('Failed to connect wallet', 'error');
-                document.getElementById('dev-error').textContent = error.message;
-            }
-        }
-
-        async function disconnectWallet() {
-            state.provider = null;
-            state.signer = null;
-            state.account = null;
-            state.chainId = null;
-            updateWalletUI();
-            updateDevPanel();
-        }
-
-        function updateWalletUI() {
-            const connectBtn = document.getElementById('connect-btn');
-            const networkPill = document.getElementById('network-pill');
-
-            if (state.account) {
-                connectBtn.textContent = `${state.account.slice(0, 6)}...${state.account.slice(-4)}`;
-                connectBtn.onclick = disconnectWallet;
-                networkPill.textContent = state.chainId === CONFIG.chainId ? 'PulseChain' : `Chain ${state.chainId}`;
-                networkPill.className = `network-pill ${state.chainId === CONFIG.chainId ? 'connected' : ''}`;
-                loadMyLocks();
-            } else {
-                connectBtn.textContent = 'Connect Wallet';
-                connectBtn.onclick = connectWallet;
-                networkPill.textContent = 'Disconnected';
-                networkPill.className = 'network-pill';
-                renderLocksTable([]);
-            }
-        }
-
-        async function ensurePulseChain() {
-            if (Number(state.chainId) === CONFIG.chainId) return true;
-
-            const modal = document.getElementById('network-modal');
-            modal.classList.add('show');
-
-            const targetHex = ethers.toBeHex(CONFIG.chainId);
-
-            return new Promise((resolve) => {
-                document.getElementById('switch-network').onclick = async () => {
-                    try {
-                        await state.provider.send('wallet_switchEthereumChain', [{ chainId: targetHex }]);
-                        modal.classList.remove('show');
-                        const network = await state.provider.getNetwork();
-                        state.chainId = Number(network.chainId);
-                        updateWalletUI();
-                        resolve(true);
-                    } catch (error) {
-                        if (error.code === 4902) {
-                            try {
-                                await state.provider.send('wallet_addEthereumChain', [{
-                                    chainId: targetHex,
-                                    chainName: 'PulseChain',
-                                    nativeCurrency: { name: 'Pulse', symbol: 'PLS', decimals: 18 },
-                                    rpcUrls: [CONFIG.rpcUrl],
-                                    blockExplorerUrls: [CONFIG.explorer]
-                                }]);
-                                modal.classList.remove('show');
-                                const network = await state.provider.getNetwork();
-                                state.chainId = Number(network.chainId);
-                                updateWalletUI();
-                                resolve(true);
-                            } catch (addError) {
-                                showToast('Failed to add PulseChain network', 'error');
-                                resolve(false);
-                            }
-                        } else {
-                            showToast('Failed to switch network', 'error');
-                            resolve(false);
-                        }
-                    }
-                };
-            });
-        }
-
-        async function readTokenMeta(address) {
-            try {
-                if (!ethers.isAddress(address)) throw new Error('Invalid address');
-
-                // Base ERC20 metadata
-                const erc = new ethers.Contract(address, ERC20_ABI, state.provider);
-                const [name, symbol, decimals] = await Promise.all([
-                    erc.name(), erc.symbol(), erc.decimals()
-                ]);
-
-                // Try to detect LP pair info
-                let pairInfo = null, isLP = false;
-                try {
-                    const pair = new ethers.Contract(address, PAIR_ABI, state.provider);
-                    const [t0, t1] = await Promise.all([pair.token0(), pair.token1()]);
-                    const t0c = new ethers.Contract(t0, ERC20_ABI, state.provider);
-                    const t1c = new ethers.Contract(t1, ERC20_ABI, state.provider);
-                    const [s0, s1] = await Promise.all([t0c.symbol(), t1c.symbol()]);
-                    pairInfo = { token0Symbol: s0, token1Symbol: s1 };
-                    isLP = true;
-                } catch {}
-
-                const metadata = { name, symbol, decimals, isLP, pairInfo };
-                state.tokenMetadata.set(address.toLowerCase(), metadata);
-                return metadata;
-            } catch (error) {
-                console.error('Failed to read token metadata:', error);
-                throw error;
-            }
-        }
-
-        async function readTokenInfo(type) {
-            const addressInput = document.getElementById(
-                type === 'linear' ? 'linear-token' : type === 'lp' ? 'lp-address' : 'token-address'
-            );
-            const infoDiv = document.getElementById(
-                type === 'linear' ? 'linear-token-info' : type === 'lp' ? 'lp-info' : 'token-info'
-            );
-
-            const address = addressInput.value.trim();
-            if (!address) { infoDiv.style.display = 'none'; return; }
-
-            try {
-                const metadata = await readTokenMeta(address);
-                let infoText = `${metadata.name} (${metadata.symbol}) - ${metadata.decimals} decimals`;
-                if (metadata.isLP && metadata.pairInfo) {
-                    infoText += ` | Pair: ${metadata.pairInfo.token0Symbol}/${metadata.pairInfo.token1Symbol}`;
-                }
-                infoDiv.textContent = infoText;
-                infoDiv.style.display = 'block';
-            } catch (error) {
-                infoDiv.textContent = `Error: ${error.message}`;
-                infoDiv.style.display = 'block';
-            }
-        }
-
-        async function setMaxAmount(type) {
-            if (!state.account || !state.provider) { showToast('Please connect wallet first', 'error'); return; }
-
-            const addressInput = document.getElementById(type === 'linear' ? 'linear-token' : type === 'lp' ? 'lp-address' : 'token-address');
-            const amountInput = document.getElementById(type === 'linear' ? 'linear-amount' : type === 'lp' ? 'lp-amount' : 'token-amount');
-
-            const address = addressInput.value.trim();
-            if (!address || !ethers.isAddress(address)) { showToast('Please enter a valid token address first', 'error'); return; }
-
-            try {
-                const contract = new ethers.Contract(address, ERC20_ABI, state.provider);
-                const [balance, decimals] = await Promise.all([contract.balanceOf(state.account), contract.decimals()]);
-                const formatted = ethers.formatUnits(balance, decimals);
-                amountInput.value = formatted;
-            } catch {
-                showToast('Failed to read balance', 'error');
-            }
-        }
-
-        async function checkAndApprove(tokenAddress, amount, spender) {
-            try {
-                const contract = new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
-                const decimals = await contract.decimals();
-                const amountWei = ethers.parseUnits(amount, decimals);
-                const allowance = await contract.allowance(state.account, spender);
-
-                if (allowance < amountWei) {
-                    showToast('Approval required...', 'info');
-                    const tx = await contract.approve(spender, amountWei);
-                    await tx.wait();
-                    await new Promise(r => setTimeout(r, 600));
-                    showToast('Approval successful', 'success');
-                }
-                return true;
-            } catch (error) {
-                showToast(`Approval failed: ${error.message}`, 'error');
-                return false;
-            }
-        }
-
-        async function estimateGasForLock(type, params) {
-            try {
-                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-                let gasEstimate;
-
-                if (type === 'token') {
-                    gasEstimate = await contract.estimateGas.lock(...params);
-                } else if (type === 'lp') {
-                    gasEstimate = await contract.estimateGas.lockLP(...params);
-                } else if (type === 'linear') {
-                    gasEstimate = await contract.estimateGas.lockLinear(...params);
-                } else {
-                    throw new Error('invalid lock type');
-                }
-
-                const fee = await state.provider.getFeeData();
-                const priceWei = fee.maxFeePerGas ?? fee.gasPrice;
-                if (priceWei == null) return { gasEstimate, gasCost: 'N/A' };
-                const totalWei = gasEstimate * priceWei;
-                const gasCost = ethers.formatEther(totalWei);
-                return { gasEstimate, gasCost };
-            } catch (err) {
-                console.error('Gas estimation failed:', err);
-                return { gasEstimate: 200000n, gasCost: '0.002' };
-            }
-        }
-
-        function showGasEstimate(type, gasEstimate, gasCost) {
-            const estimateDiv = document.getElementById(`gas-estimate-${type}`);
-            const gasUnits = typeof gasEstimate === 'bigint' ? gasEstimate.toString() : String(gasEstimate ?? '');
-            const unitsNum = Number(gasUnits);
-            estimateDiv.innerHTML = `
-                <strong>Gas Estimate:</strong> ${Number.isFinite(unitsNum) ? unitsNum.toLocaleString() : gasUnits} units<br>
-                <strong>Estimated Cost:</strong> ${gasCost === 'N/A' ? 'N/A' : `~${gasCost} PLS`}
-            `;
-            estimateDiv.style.display = 'block';
-        }
-
-        async function createTokenLock() {
-            if (!state.account) { showToast('Please connect wallet', 'error'); return; }
-            if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) { showToast('Locker contract address not set', 'error'); return; }
-
-            const address = document.getElementById('token-address').value.trim();
-            const amount = document.getElementById('token-amount').value.trim();
-            const unlockTime = document.getElementById('unlock-time').value;
-
-            if (!validateInputs(address, amount, unlockTime)) return;
-
-            try {
-                const button = document.getElementById('create-token-lock');
-                button.disabled = true; button.textContent = 'Creating...';
-
-                const metadata = await readTokenMeta(address);
-                const amountWei = ethers.parseUnits(amount, metadata.decimals);
-
-                const ts = Date.parse(unlockTime);
-                if (!Number.isFinite(ts)) { showToast('Invalid unlock time', 'error'); return; }
-                const unlockTimeUnix = Math.floor(ts / 1000);
-
-                const beneficiary = state.account; // sempre o criador
-                const params = [address, amountWei, unlockTimeUnix, beneficiary];
-
-                const { gasEstimate, gasCost } = await estimateGasForLock('token', params);
-                showGasEstimate('token', gasEstimate, gasCost);
-
-                const approved = await checkAndApprove(address, amount, CONFIG.lockerAddress);
-                if (!approved) return;
-
-                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-                const tx = await contract.lock(...params);
-                showToast(`Transaction sent: ${tx.hash.slice(0, 10)}...`, 'info');
-                await tx.wait();
-                showToast(`Lock created! View on explorer`, 'success');
-                await loadMyLocks();
-                clearForm('token');
-            } catch (error) {
-                showToast(`Failed to create lock: ${error.message}`, 'error');
-                document.getElementById('dev-error').textContent = error.message;
-            } finally {
-                const button = document.getElementById('create-token-lock');
-                button.disabled = false; button.textContent = 'Create Token Lock';
-            }
-        }
-
-        async function createLPLock() {
-            if (!state.account) { showToast('Please connect wallet', 'error'); return; }
-            if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) { showToast('Locker contract address not set', 'error'); return; }
-
-            const address = document.getElementById('lp-address').value.trim();
-            const amount = document.getElementById('lp-amount').value.trim();
-            const unlockTime = document.getElementById('lp-unlock-time').value;
-
-            if (!validateInputs(address, amount, unlockTime)) return;
-
-            try {
-                const button = document.getElementById('create-lp-lock');
-                button.disabled = true; button.textContent = 'Creating...';
-
-                const metadata = await readTokenMeta(address);
-                const amountWei = ethers.parseUnits(amount, metadata.decimals);
-
-                const ts = Date.parse(unlockTime);
-                if (!Number.isFinite(ts)) { showToast('Invalid unlock time', 'error'); return; }
-                const unlockTimeUnix = Math.floor(ts / 1000);
-
-                const beneficiary = state.account;
-                const params = [address, amountWei, unlockTimeUnix, beneficiary];
-
-                const { gasEstimate, gasCost } = await estimateGasForLock('lp', params);
-                showGasEstimate('lp', gasEstimate, gasCost);
-
-                const approved = await checkAndApprove(address, amount, CONFIG.lockerAddress);
-                if (!approved) return;
-
-                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-                const tx = await contract.lockLP(...params);
-                showToast(`Transaction sent: ${tx.hash.slice(0, 10)}...`, 'info');
-                await tx.wait();
-                showToast(`LP Lock created!`, 'success');
-                await loadMyLocks();
-                clearForm('lp');
-            } catch (error) {
-                showToast(`Failed to create LP lock: ${error.message}`, 'error');
-                document.getElementById('dev-error').textContent = error.message;
-            } finally {
-                const button = document.getElementById('create-lp-lock');
-                button.disabled = false; button.textContent = 'Create LP Lock';
-            }
-        }
-
-        async function createLinearLock() {
-            if (!state.account) { showToast('Please connect wallet', 'error'); return; }
-            if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) { showToast('Locker contract address not set', 'error'); return; }
-
-            const address = document.getElementById('linear-token').value.trim();
-            const amount = document.getElementById('linear-amount').value.trim();
-            const startTime = document.getElementById('start-time').value;
-            const endTime = document.getElementById('end-time').value;
-
-            if (!validateLinearInputs(address, amount, startTime, endTime)) return;
-
-            try {
-                const button = document.getElementById('create-linear-lock');
-                button.disabled = true; button.textContent = 'Creating...';
-
-                const metadata = await readTokenMeta(address);
-                const amountWei = ethers.parseUnits(amount, metadata.decimals);
-
-                const tsStart = Date.parse(startTime);
-                const tsEnd = Date.parse(endTime);
-                if (!Number.isFinite(tsStart) || !Number.isFinite(tsEnd)) { showToast('Invalid start or end time', 'error'); return; }
-
-                const startTimeUnix = Math.floor(tsStart / 1000);
-                const endTimeUnix = Math.floor(tsEnd / 1000);
-
-                const beneficiary = state.account;
-                const params = [address, amountWei, startTimeUnix, endTimeUnix, beneficiary];
-
-                const { gasEstimate, gasCost } = await estimateGasForLock('linear', params);
-                showGasEstimate('linear', gasEstimate, gasCost);
-
-                const approved = await checkAndApprove(address, amount, CONFIG.lockerAddress);
-                if (!approved) return;
-
-                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-                const tx = await contract.lockLinear(...params);
-                showToast(`Transaction sent: ${tx.hash.slice(0, 10)}...`, 'info');
-                await tx.wait();
-                showToast(`Linear Lock created!`, 'success');
-                await loadMyLocks();
-                clearForm('linear');
-            } catch (error) {
-                showToast(`Failed to create linear lock: ${error.message}`, 'error');
-                document.getElementById('dev-error').textContent = error.message;
-            } finally {
-                const button = document.getElementById('create-linear-lock');
-                button.disabled = false; button.textContent = 'Create Linear Lock';
-            }
-        }
-
-        function validateInputs(address, amount, unlockTime) {
-            if (!ethers.isAddress(address)) { showToast('Invalid token address', 'error'); return false; }
-            if (!amount || parseFloat(amount) <= 0) { showToast('Invalid amount', 'error'); return false; }
-            const ts = Date.parse(unlockTime);
-            if (!Number.isFinite(ts)) { showToast('Invalid unlock time', 'error'); return false; }
-            if (ts <= Date.now()) { showToast('Unlock time must be in the future', 'error'); return false; }
-            return true;
-        }
-
-        function validateLinearInputs(address, amount, startTime, endTime) {
-            if (!ethers.isAddress(address)) { showToast('Invalid token address', 'error'); return false; }
-            if (!amount || parseFloat(amount) <= 0) { showToast('Invalid amount', 'error'); return false; }
-            const tsStart = Date.parse(startTime);
-            const tsEnd = Date.parse(endTime);
-            if (!Number.isFinite(tsStart) || !Number.isFinite(tsEnd)) { showToast('Invalid start or end time', 'error'); return false; }
-            if (tsStart <= Date.now()) { showToast('Start time must be in the future', 'error'); return false; }
-            if (tsStart >= tsEnd) { showToast('End time must be after start time', 'error'); return false; }
-            return true;
-        }
-
-        function clearForm(type) {
-            const fields = {
-                token: ['token-address', 'token-amount', 'unlock-time', 'notes'],
-                lp: ['lp-address', 'lp-amount', 'lp-unlock-time'],
-                linear: ['linear-token', 'linear-amount', 'start-time', 'end-time']
-            };
-            fields[type].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-            const infoId = type === 'linear' ? 'linear-token-info' : type === 'lp' ? 'lp-info' : 'token-info';
-            const gasId = `gas-estimate-${type}`;
-            const infoEl = document.getElementById(infoId); if (infoEl) infoEl.style.display = 'none';
-            const gasEl = document.getElementById(gasId); if (gasEl) gasEl.style.display = 'none';
-        }
-
-        async function loadMyLocks() {
-            if (!state.account || !CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) return;
-
-            try {
-                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.provider);
-                const latest = await state.provider.getBlockNumber();
-                const from = Math.max(0, CONFIG.deploymentBlock || 0);
-
-                const filterLocked = contract.filters.Locked(null, null, state.account);
-                const events = await contract.queryFilter(filterLocked, from, latest);
-
-                const locks = events.map(ev => {
-                    const args = ev.args;
-                    const lockId = Number(args.lockId);
-                    const token = args.token;
-                    const owner = args.owner;
-                    const amount = args.amount;
-                    const unlockTime = Number(args.unlockTime);
-                    const beneficiary = args.beneficiary;
-                    return {
-                        lockId, token, amount, unlockTime, owner, beneficiary,
-                        withdrawn: false, type: 'token', txHash: ev.transactionHash
-                    };
-                });
-
-                const filterW = contract.filters.Withdrawn(null, null, state.account);
-                const wEvents = await contract.queryFilter(filterW, from, latest);
-                const withdrawnSet = new Set(wEvents.map(e => Number(e.args.lockId)));
-                locks.forEach(l => { if (withdrawnSet.has(l.lockId)) l.withdrawn = true; });
-
-                state.locks = locks;
-
-                // Prefetch metadata for unique tokens
-                const uniq = Array.from(new Set(locks.map(l => l.token.toLowerCase())));
-                await Promise.all(uniq.map(addr => {
-                    if (!state.tokenMetadata.has(addr)) return readTokenMeta(addr).catch(() => {});
-                }));
-
-                renderLocksTable(state.locks);
-            } catch (error) {
-                console.error('Failed to load locks:', error);
-                showToast('Failed to load locks', 'error');
-            }
-        }
-
-        function renderLocksTable(locks) {
-            const tbody = document.getElementById('locks-table-body');
-
-            if (!locks.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px;">No locks found</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = locks.map(lock => {
-                const md = state.tokenMetadata.get(lock.token?.toLowerCase()) || { symbol: 'Unknown', decimals: 18 };
-                let amountStr = '0';
-                try { amountStr = ethers.formatUnits(lock.amount || 0, md.decimals); } catch {}
-                const unlockDate = new Date((lock.unlockTime || 0) * 1000);
-                const now = new Date();
-                const isUnlocked = now >= unlockDate;
-                const canWithdraw = isUnlocked && lock.owner?.toLowerCase() === state.account?.toLowerCase() && !lock.withdrawn;
-
-                const txLink = lock.txHash && lock.txHash.startsWith('0x')
-                    ? `<a href="${CONFIG.explorer}/tx/${lock.txHash}" target="_blank" class="btn" style="margin-left: 8px;">View Tx</a>`
-                    : '';
-
-                return `
-                    <tr>
-                        <td>#${lock.lockId}</td>
-                        <td>${md.symbol}</td>
-                        <td>${Number.parseFloat(amountStr).toLocaleString()}</td>
-                        <td>
-                            <div>${unlockDate.toLocaleDateString()} ${unlockDate.toLocaleTimeString()}</div>
-                            <div class="countdown" data-unlock="${lock.unlockTime}">
-                                ${isUnlocked ? 'Unlocked' : getTimeUntil(lock.unlockTime)}
-                            </div>
-                        </td>
-                        <td>${'Self'}</td>
-                        <td>
-                            <span class="status-badge ${lock.withdrawn ? 'withdrawn' : isUnlocked ? 'unlocked' : 'active'}">
-                                ${lock.withdrawn ? 'Withdrawn' : isUnlocked ? 'Unlocked' : 'Locked'}
-                            </span>
-                        </td>
-                        <td>
-                            ${canWithdraw ? `<button class="btn" onclick="withdrawLock(${lock.lockId})">Withdraw</button>` : ''}
-                            ${txLink}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            startCountdownTimers();
-        }
-
-        function getTimeUntil(unlockTime) {
-            const now = new Date();
-            const unlock = new Date(unlockTime * 1000);
-            const diff = unlock - now;
-            if (diff <= 0) return 'Unlocked';
-
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-            if (days > 0) return `${days}d ${hours}h`;
-            if (hours > 0) return `${hours}h ${minutes}m`;
-            return `${minutes}m`;
-        }
-
-        function startCountdownTimers() {
-            state.countdownIntervals.forEach(interval => clearInterval(interval));
-            state.countdownIntervals.clear();
-
-            document.querySelectorAll('.countdown').forEach(element => {
-                const unlockTime = parseInt(element.dataset.unlock);
-                const interval = setInterval(() => {
-                    const timeUntil = getTimeUntil(unlockTime);
-                    element.textContent = timeUntil;
-                    if (timeUntil === 'Unlocked') {
-                        clearInterval(interval);
-                        state.countdownIntervals.delete(interval);
-                        loadMyLocks();
-                    }
-                }, 60000);
-                state.countdownIntervals.add(interval);
-            });
-        }
-
-        async function withdrawLock(lockId) {
-            if (!state.account) { showToast('Please connect wallet', 'error'); return; }
-            if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) { showToast('Locker contract address not set', 'error'); return; }
-
-            try {
-                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-                const tx = await contract.withdraw(lockId);
-                showToast(`Withdrawal sent: ${tx.hash.slice(0, 10)}...`, 'info');
-                await tx.wait();
-                showToast(`Withdrawal successful!`, 'success');
-                await loadMyLocks();
-            } catch (error) {
-                showToast(`Withdrawal failed: ${error.message}`, 'error');
-            }
-        }
-
-        function filterLocks() {
-            const searchTerm = document.getElementById('search-locks').value.toLowerCase();
-            if (!searchTerm) { renderLocksTable(state.locks); return; }
-
-            const filtered = state.locks.filter(lock => {
-                const md = state.tokenMetadata.get(lock.token?.toLowerCase()) || { symbol: 'Unknown' };
-                return md.symbol.toLowerCase().includes(searchTerm) || lock.token.toLowerCase().includes(searchTerm);
-            });
-
-            renderLocksTable(filtered);
-        }
-
-        window.withdrawLock = withdrawLock;
-    </script>
+    window.withdrawLock=withdrawLock;
+  </script>
 </body>
 </html>
 
