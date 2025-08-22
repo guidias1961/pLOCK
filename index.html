@@ -52,7 +52,6 @@
             padding: 0 20px;
             position: relative;
             z-index: 1;
-            
         }
 
         .panel {
@@ -779,4 +778,668 @@
                 state.account = await state.signer.getAddress();
                 
                 const network = await state.provider.getNetwork();
-                state.
+                state.chainId = Number(network.chainId);
+
+                updateWalletUI();
+                await ensurePulseChain();
+                updateDevPanel();
+            } catch (error) {
+                console.error('Connection failed:', error);
+                showToast('Failed to connect wallet', 'error');
+                document.getElementById('dev-error').textContent = error.message;
+            }
+        }
+
+        async function disconnectWallet() {
+            state.provider = null;
+            state.signer = null;
+            state.account = null;
+            state.chainId = null;
+            updateWalletUI();
+            updateDevPanel();
+        }
+
+        function updateWalletUI() {
+            const connectBtn = document.getElementById('connect-btn');
+            const networkPill = document.getElementById('network-pill');
+
+            if (state.account) {
+                connectBtn.textContent = `${state.account.slice(0, 6)}...${state.account.slice(-4)}`;
+                connectBtn.onclick = disconnectWallet;
+                networkPill.textContent = state.chainId === CONFIG.chainId ? 'PulseChain' : `Chain ${state.chainId}`;
+                networkPill.className = `network-pill ${state.chainId === CONFIG.chainId ? 'connected' : ''}`;
+                loadMyLocks();
+            } else {
+                connectBtn.textContent = 'Connect Wallet';
+                connectBtn.onclick = connectWallet;
+                networkPill.textContent = 'Disconnected';
+                networkPill.className = 'network-pill';
+                renderLocksTable([]);
+            }
+        }
+
+        async function ensurePulseChain() {
+            if (state.chainId === CONFIG.chainId) return true;
+
+            const modal = document.getElementById('network-modal');
+            modal.classList.add('show');
+
+            return new Promise((resolve) => {
+                document.getElementById('switch-network').onclick = async () => {
+                    try {
+                        await state.provider.send('wallet_switchEthereumChain', [
+                            { chainId: '0x171' }
+                        ]);
+                        modal.classList.remove('show');
+                        const network = await state.provider.getNetwork();
+                        state.chainId = Number(network.chainId);
+                        updateWalletUI();
+                        resolve(true);
+                    } catch (error) {
+                        if (error.code === 4902) {
+                            try {
+                                await state.provider.send('wallet_addEthereumChain', [{
+                                    chainId: '0x171',
+                                    chainName: 'PulseChain',
+                                    nativeCurrency: {
+                                        name: 'Pulse',
+                                        symbol: 'PLS',
+                                        decimals: 18
+                                    },
+                                    rpcUrls: [CONFIG.rpcUrl],
+                                    blockExplorerUrls: [CONFIG.explorer]
+                                }]);
+                                modal.classList.remove('show');
+                                const network = await state.provider.getNetwork();
+                                state.chainId = Number(network.chainId);
+                                updateWalletUI();
+                                resolve(true);
+                            } catch (addError) {
+                                showToast('Failed to add PulseChain network', 'error');
+                                resolve(false);
+                            }
+                        } else {
+                            showToast('Failed to switch network', 'error');
+                            resolve(false);
+                        }
+                    }
+                };
+            });
+        }
+
+        // Token metadata reading
+        async function readTokenMeta(address, isLP = false) {
+            try {
+                if (!ethers.isAddress(address)) {
+                    throw new Error('Invalid address');
+                }
+
+                const contract = new ethers.Contract(address, isLP ? PAIR_ABI : ERC20_ABI, state.provider);
+                
+                const [name, symbol, decimals] = await Promise.all([
+                    contract.name(),
+                    contract.symbol(),
+                    contract.decimals()
+                ]);
+
+                let pairInfo = null;
+                if (isLP) {
+                    try {
+                        const [token0Address, token1Address] = await Promise.all([
+                            contract.token0(),
+                            contract.token1()
+                        ]);
+                        
+                        const token0Contract = new ethers.Contract(token0Address, ERC20_ABI, state.provider);
+                        const token1Contract = new ethers.Contract(token1Address, ERC20_ABI, state.provider);
+                        
+                        const [token0Symbol, token1Symbol] = await Promise.all([
+                            token0Contract.symbol(),
+                            token1Contract.symbol()
+                        ]);
+
+                        pairInfo = { token0Symbol, token1Symbol };
+                    } catch (error) {
+                        console.warn('Failed to read pair info:', error);
+                    }
+                }
+
+                const metadata = { name, symbol, decimals, isLP, pairInfo };
+                state.tokenMetadata.set(address.toLowerCase(), metadata);
+                return metadata;
+            } catch (error) {
+                console.error('Failed to read token metadata:', error);
+                throw error;
+            }
+        }
+
+        async function readTokenInfo(type) {
+            const addressInput = document.getElementById(`${type === 'linear' ? 'linear-token' : type === 'lp' ? 'lp-address' : 'token-address'}`);
+            const infoDiv = document.getElementById(`${type === 'linear' ? 'linear-token-info' : type === 'lp' ? 'lp-info' : 'token-info'}`);
+            
+            const address = addressInput.value.trim();
+            if (!address) {
+                infoDiv.style.display = 'none';
+                return;
+            }
+
+            try {
+                const metadata = await readTokenMeta(address, type === 'lp');
+                
+                let infoText = `${metadata.name} (${metadata.symbol}) - ${metadata.decimals} decimals`;
+                if (metadata.isLP && metadata.pairInfo) {
+                    infoText += ` | Pair: ${metadata.pairInfo.token0Symbol}/${metadata.pairInfo.token1Symbol}`;
+                }
+                
+                infoDiv.textContent = infoText;
+                infoDiv.style.display = 'block';
+            } catch (error) {
+                infoDiv.textContent = `Error: ${error.message}`;
+                infoDiv.style.display = 'block';
+            }
+        }
+
+        async function setMaxAmount(type) {
+            if (!state.account || !state.provider) {
+                showToast('Please connect wallet first', 'error');
+                return;
+            }
+
+            const addressInput = document.getElementById(`${type === 'linear' ? 'linear-token' : type === 'lp' ? 'lp-address' : 'token-address'}`);
+            const amountInput = document.getElementById(`${type === 'linear' ? 'linear-amount' : type === 'lp' ? 'lp-amount' : 'token-amount'}`);
+            
+            const address = addressInput.value.trim();
+            if (!address || !ethers.isAddress(address)) {
+                showToast('Please enter a valid token address first', 'error');
+                return;
+            }
+
+            try {
+                const contract = new ethers.Contract(address, ERC20_ABI, state.provider);
+                const balance = await contract.balanceOf(state.account);
+                const decimals = await contract.decimals();
+                
+                const formatted = ethers.formatUnits(balance, decimals);
+                amountInput.value = formatted;
+            } catch (error) {
+                showToast('Failed to read balance', 'error');
+            }
+        }
+
+        // Approval flow
+        async function checkAndApprove(tokenAddress, amount, spender) {
+            try {
+                const contract = new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
+                const decimals = await contract.decimals();
+                const amountWei = ethers.parseUnits(amount, decimals);
+                
+                const allowance = await contract.allowance(state.account, spender);
+                
+                if (allowance < amountWei) {
+                    showToast('Approval required...', 'info');
+                    const tx = await contract.approve(spender, amountWei);
+                    await tx.wait();
+                    showToast('Approval successful', 'success');
+                }
+                return true;
+            } catch (error) {
+                showToast(`Approval failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        // Gas estimation
+        async function estimateGasForLock(type, params) {
+            try {
+                if (state.demoMode) return { gasEstimate: 150000n, gasCost: '0.001' };
+
+                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+                let gasEstimate;
+
+                switch (type) {
+                    case 'token':
+                        gasEstimate = await contract.lock.estimateGas(...params);
+                        break;
+                    case 'lp':
+                        gasEstimate = await contract.lockLP.estimateGas(...params);
+                        break;
+                    case 'linear':
+                        gasEstimate = await contract.lockLinear.estimateGas(...params);
+                        break;
+                }
+
+                const gasPrice = await state.provider.getFeeData();
+                const gasCost = ethers.formatEther(gasEstimate * gasPrice.gasPrice);
+
+                return { gasEstimate, gasCost };
+            } catch (error) {
+                console.error('Gas estimation failed:', error);
+                return { gasEstimate: 200000n, gasCost: '0.002' };
+            }
+        }
+
+        function showGasEstimate(type, gasEstimate, gasCost) {
+            const estimateDiv = document.getElementById(`gas-estimate-${type}`);
+            estimateDiv.innerHTML = `
+                <strong>Gas Estimate:</strong> ${gasEstimate.toLocaleString()} units<br>
+                <strong>Estimated Cost:</strong> ~${gasCost} PLS
+            `;
+            estimateDiv.style.display = 'block';
+        }
+
+        // Lock creation functions
+        async function createTokenLock() {
+            if (!state.account) {
+                showToast('Please connect wallet', 'error');
+                return;
+            }
+
+            const address = document.getElementById('token-address').value.trim();
+            const amount = document.getElementById('token-amount').value.trim();
+            const unlockTime = document.getElementById('unlock-time').value;
+            const beneficiary = document.getElementById('beneficiary').value.trim() || state.account;
+
+            if (!validateInputs(address, amount, unlockTime)) return;
+
+            try {
+                const button = document.getElementById('create-token-lock');
+                button.disabled = true;
+                button.textContent = 'Creating...';
+
+                const metadata = await readTokenMeta(address);
+                const amountWei = ethers.parseUnits(amount, metadata.decimals);
+                const unlockTimeUnix = Math.floor(new Date(unlockTime).getTime() / 1000);
+
+                const params = [address, amountWei, unlockTimeUnix, beneficiary];
+                const { gasEstimate, gasCost } = await estimateGasForLock('token', params);
+                showGasEstimate('token', gasEstimate, gasCost);
+
+                if (state.demoMode) {
+                    // Demo mode simulation
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const lockId = state.lockIdCounter++;
+                    state.locks.push({
+                        lockId,
+                        token: address,
+                        amount: amountWei,
+                        unlockTime: unlockTimeUnix,
+                        owner: state.account,
+                        beneficiary,
+                        withdrawn: false,
+                        type: 'token',
+                        txHash: '0xdemo...'
+                    });
+                    showToast('Demo lock created successfully', 'success');
+                    renderLocksTable(state.locks);
+                } else {
+                    const approved = await checkAndApprove(address, amount, CONFIG.lockerAddress);
+                    if (!approved) return;
+
+                    const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+                    const tx = await contract.lock(...params);
+                    showToast(`Transaction sent: ${tx.hash.slice(0, 10)}...`, 'info');
+                    
+                    const receipt = await tx.wait();
+                    showToast(`Lock created! View: ${CONFIG.explorer}/tx/${tx.hash}`, 'success');
+                    loadMyLocks();
+                }
+
+                // Clear form
+                clearForm('token');
+            } catch (error) {
+                showToast(`Failed to create lock: ${error.message}`, 'error');
+                document.getElementById('dev-error').textContent = error.message;
+            } finally {
+                const button = document.getElementById('create-token-lock');
+                button.disabled = false;
+                button.textContent = 'Create Token Lock';
+            }
+        }
+
+        async function createLPLock() {
+            if (!state.account) {
+                showToast('Please connect wallet', 'error');
+                return;
+            }
+
+            const address = document.getElementById('lp-address').value.trim();
+            const amount = document.getElementById('lp-amount').value.trim();
+            const unlockTime = document.getElementById('lp-unlock-time').value;
+            const beneficiary = document.getElementById('lp-beneficiary').value.trim() || state.account;
+
+            if (!validateInputs(address, amount, unlockTime)) return;
+
+            try {
+                const button = document.getElementById('create-lp-lock');
+                button.disabled = true;
+                button.textContent = 'Creating...';
+
+                const metadata = await readTokenMeta(address, true);
+                const amountWei = ethers.parseUnits(amount, metadata.decimals);
+                const unlockTimeUnix = Math.floor(new Date(unlockTime).getTime() / 1000);
+
+                const params = [address, amountWei, unlockTimeUnix, beneficiary];
+                const { gasEstimate, gasCost } = await estimateGasForLock('lp', params);
+                showGasEstimate('lp', gasEstimate, gasCost);
+
+                if (state.demoMode) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const lockId = state.lockIdCounter++;
+                    state.locks.push({
+                        lockId,
+                        token: address,
+                        amount: amountWei,
+                        unlockTime: unlockTimeUnix,
+                        owner: state.account,
+                        beneficiary,
+                        withdrawn: false,
+                        type: 'lp',
+                        txHash: '0xdemo...'
+                    });
+                    showToast('Demo LP lock created successfully', 'success');
+                    renderLocksTable(state.locks);
+                } else {
+                    const approved = await checkAndApprove(address, amount, CONFIG.lockerAddress);
+                    if (!approved) return;
+
+                    const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+                    const tx = await contract.lockLP(...params);
+                    showToast(`Transaction sent: ${tx.hash.slice(0, 10)}...`, 'info');
+                    
+                    const receipt = await tx.wait();
+                    showToast(`LP Lock created! View: ${CONFIG.explorer}/tx/${tx.hash}`, 'success');
+                    loadMyLocks();
+                }
+
+                clearForm('lp');
+            } catch (error) {
+                showToast(`Failed to create LP lock: ${error.message}`, 'error');
+                document.getElementById('dev-error').textContent = error.message;
+            } finally {
+                const button = document.getElementById('create-lp-lock');
+                button.disabled = false;
+                button.textContent = 'Create LP Lock';
+            }
+        }
+
+        async function createLinearLock() {
+            if (!state.account) {
+                showToast('Please connect wallet', 'error');
+                return;
+            }
+
+            const address = document.getElementById('linear-token').value.trim();
+            const amount = document.getElementById('linear-amount').value.trim();
+            const startTime = document.getElementById('start-time').value;
+            const endTime = document.getElementById('end-time').value;
+            const beneficiary = document.getElementById('linear-beneficiary').value.trim() || state.account;
+
+            if (!validateLinearInputs(address, amount, startTime, endTime)) return;
+
+            try {
+                const button = document.getElementById('create-linear-lock');
+                button.disabled = true;
+                button.textContent = 'Creating...';
+
+                const metadata = await readTokenMeta(address);
+                const amountWei = ethers.parseUnits(amount, metadata.decimals);
+                const startTimeUnix = Math.floor(new Date(startTime).getTime() / 1000);
+                const endTimeUnix = Math.floor(new Date(endTime).getTime() / 1000);
+
+                const params = [address, amountWei, startTimeUnix, endTimeUnix, beneficiary];
+                const { gasEstimate, gasCost } = await estimateGasForLock('linear', params);
+                showGasEstimate('linear', gasEstimate, gasCost);
+
+                if (state.demoMode) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const lockId = state.lockIdCounter++;
+                    state.locks.push({
+                        lockId,
+                        token: address,
+                        amount: amountWei,
+                        unlockTime: endTimeUnix,
+                        startTime: startTimeUnix,
+                        owner: state.account,
+                        beneficiary,
+                        withdrawn: false,
+                        type: 'linear',
+                        txHash: '0xdemo...'
+                    });
+                    showToast('Demo linear lock created successfully', 'success');
+                    renderLocksTable(state.locks);
+                } else {
+                    const approved = await checkAndApprove(address, amount, CONFIG.lockerAddress);
+                    if (!approved) return;
+
+                    const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+                    const tx = await contract.lockLinear(...params);
+                    showToast(`Transaction sent: ${tx.hash.slice(0, 10)}...`, 'info');
+                    
+                    const receipt = await tx.wait();
+                    showToast(`Linear Lock created! View: ${CONFIG.explorer}/tx/${tx.hash}`, 'success');
+                    loadMyLocks();
+                }
+
+                clearForm('linear');
+            } catch (error) {
+                showToast(`Failed to create linear lock: ${error.message}`, 'error');
+                document.getElementById('dev-error').textContent = error.message;
+            } finally {
+                const button = document.getElementById('create-linear-lock');
+                button.disabled = false;
+                button.textContent = 'Create Linear Lock';
+            }
+        }
+
+        // Validation functions
+        function validateInputs(address, amount, unlockTime) {
+            if (!ethers.isAddress(address)) {
+                showToast('Invalid token address', 'error');
+                return false;
+            }
+
+            if (!amount || parseFloat(amount) <= 0) {
+                showToast('Invalid amount', 'error');
+                return false;
+            }
+
+            const unlockDate = new Date(unlockTime);
+            if (unlockDate <= new Date()) {
+                showToast('Unlock time must be in the future', 'error');
+                return false;
+            }
+
+            return true;
+        }
+
+        function validateLinearInputs(address, amount, startTime, endTime) {
+            if (!validateInputs(address, amount, endTime)) return false;
+
+            const startDate = new Date(startTime);
+            const endDate = new Date(endTime);
+
+            if (startDate >= endDate) {
+                showToast('End time must be after start time', 'error');
+                return false;
+            }
+
+            if (startDate <= new Date()) {
+                showToast('Start time must be in the future', 'error');
+                return false;
+            }
+
+            return true;
+        }
+
+        function clearForm(type) {
+            const fields = {
+                token: ['token-address', 'token-amount', 'unlock-time', 'beneficiary', 'notes'],
+                lp: ['lp-address', 'lp-amount', 'lp-unlock-time', 'lp-beneficiary'],
+                linear: ['linear-token', 'linear-amount', 'start-time', 'end-time', 'linear-beneficiary']
+            };
+
+            fields[type].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+
+            document.getElementById(`${type === 'linear' ? 'linear-token-info' : type === 'lp' ? 'lp-info' : 'token-info'}`).style.display = 'none';
+            document.getElementById(`gas-estimate-${type}`).style.display = 'none';
+        }
+
+        // Load user's locks
+        async function loadMyLocks() {
+            if (!state.account) return;
+
+            try {
+                if (state.demoMode) {
+                    renderLocksTable(state.locks);
+                    return;
+                }
+
+                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.provider);
+                // In a real implementation, you would query events or have a method to get user's locks
+                // For now, we'll show empty state for non-demo mode
+                renderLocksTable([]);
+            } catch (error) {
+                console.error('Failed to load locks:', error);
+                showToast('Failed to load locks', 'error');
+            }
+        }
+
+        // Render locks table
+        function renderLocksTable(locks) {
+            const tbody = document.getElementById('locks-table-body');
+            
+            if (!locks.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px;">No locks found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = locks.map(lock => {
+                const metadata = state.tokenMetadata.get(lock.token?.toLowerCase()) || { symbol: 'Unknown', decimals: 18 };
+                const amount = ethers.formatUnits(lock.amount || 0, metadata.decimals);
+                const unlockDate = new Date((lock.unlockTime || 0) * 1000);
+                const now = new Date();
+                const isUnlocked = now >= unlockDate;
+                const canWithdraw = isUnlocked && lock.owner === state.account && !lock.withdrawn;
+
+                return `
+                    <tr>
+                        <td>#${lock.lockId}</td>
+                        <td>${metadata.symbol}</td>
+                        <td>${parseFloat(amount).toLocaleString()}</td>
+                        <td>
+                            <div>${unlockDate.toLocaleDateString()} ${unlockDate.toLocaleTimeString()}</div>
+                            <div class="countdown" data-unlock="${lock.unlockTime}">
+                                ${isUnlocked ? 'Unlocked' : getTimeUntil(lock.unlockTime)}
+                            </div>
+                        </td>
+                        <td>${lock.beneficiary === lock.owner ? 'Self' : `${lock.beneficiary.slice(0, 6)}...`}</td>
+                        <td>
+                            <span class="status-badge ${lock.withdrawn ? 'withdrawn' : isUnlocked ? 'unlocked' : 'active'}">
+                                ${lock.withdrawn ? 'Withdrawn' : isUnlocked ? 'Unlocked' : 'Locked'}
+                            </span>
+                        </td>
+                        <td>
+                            ${canWithdraw ? `<button class="btn" onclick="withdrawLock(${lock.lockId})">Withdraw</button>` : ''}
+                            <a href="${CONFIG.explorer}/tx/${lock.txHash}" target="_blank" class="btn" style="margin-left: 8px;">View Tx</a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Start countdown timers
+            startCountdownTimers();
+        }
+
+        function getTimeUntil(unlockTime) {
+            const now = new Date();
+            const unlock = new Date(unlockTime * 1000);
+            const diff = unlock - now;
+
+            if (diff <= 0) return 'Unlocked';
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        function startCountdownTimers() {
+            // Clear existing intervals
+            state.countdownIntervals.forEach(interval => clearInterval(interval));
+            state.countdownIntervals.clear();
+
+            document.querySelectorAll('.countdown').forEach(element => {
+                const unlockTime = parseInt(element.dataset.unlock);
+                const interval = setInterval(() => {
+                    const timeUntil = getTimeUntil(unlockTime);
+                    element.textContent = timeUntil;
+                    
+                    if (timeUntil === 'Unlocked') {
+                        clearInterval(interval);
+                        state.countdownIntervals.delete(interval);
+                        // Refresh the table to update withdraw buttons
+                        loadMyLocks();
+                    }
+                }, 60000); // Update every minute
+
+                state.countdownIntervals.add(interval);
+            });
+        }
+
+        // Withdraw function
+        async function withdrawLock(lockId) {
+            if (!state.account) {
+                showToast('Please connect wallet', 'error');
+                return;
+            }
+
+            try {
+                if (state.demoMode) {
+                    const lock = state.locks.find(l => l.lockId === lockId);
+                    if (lock) {
+                        lock.withdrawn = true;
+                        showToast('Demo withdrawal successful', 'success');
+                        renderLocksTable(state.locks);
+                    }
+                    return;
+                }
+
+                const contract = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+                const tx = await contract.withdraw(lockId);
+                showToast(`Withdrawal sent: ${tx.hash.slice(0, 10)}...`, 'info');
+                
+                await tx.wait();
+                showToast(`Withdrawal successful! View: ${CONFIG.explorer}/tx/${tx.hash}`, 'success');
+                loadMyLocks();
+            } catch (error) {
+                showToast(`Withdrawal failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Search and filter functionality
+        function filterLocks() {
+            const searchTerm = document.getElementById('search-locks').value.toLowerCase();
+            if (!searchTerm) {
+                renderLocksTable(state.locks);
+                return;
+            }
+
+            const filtered = state.locks.filter(lock => {
+                const metadata = state.tokenMetadata.get(lock.token?.toLowerCase()) || { symbol: 'Unknown' };
+                return metadata.symbol.toLowerCase().includes(searchTerm) ||
+                       lock.token.toLowerCase().includes(searchTerm);
+            });
+
+            renderLocksTable(filtered);
+        }
+
+        // Make functions globally available
+        window.withdrawLock = withdrawLock;
+    </script>
+</body>
+</html>
