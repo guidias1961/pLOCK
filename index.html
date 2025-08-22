@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pLOCK - Professional Token Locking on PulseChain</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        :root {
+            --pc-black: #0a0b0f;
+            --pc-purple: #7a3cff;
+            --pc-magenta: #ff00e0;
+            --pc-cyan: #00e5ff;
+            --pc-gray-1: #12131a;
+            --pc-gray-2: #1b1c25;
+            --pc-gray-3: #262838;
+            --pc-white: #ffffff;
+            --pc-text: #e2e8f0;
+            --pc-text-muted: #94a3b8;
+            --pc-border: #475569;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--pc-black);
+            color: var(--pc-text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        #particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .panel {
+            background: linear-gradient(145deg, var(--pc-gray-1), var(--pc-gray-2));
+            border: 1px solid var(--pc-border);
+            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+            box-shadow: 
+                inset 2px 2px 4px rgba(255, 255, 255, 0.05),
+                inset -2px -2px 4px rgba(0, 0, 0, 0.5),
+                0 4px 16px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: linear-gradient(145deg, var(--pc-gray-2), var(--pc-gray-3));
+            border: 1px solid var(--pc-border);
+            color: var(--pc-text);
+            cursor: pointer;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 
+                inset 1px 1px 2px rgba(255, 255, 255, 0.1),
+                inset -1px -1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:hover {
+            background: linear-gradient(145deg, var(--pc-gray-3), var(--pc-purple));
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: 
+                inset 2px 2px 4px rgba(0, 0, 0, 0.4),
+                inset -1px -1px 2px rgba(255, 255, 255, 0.1);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(145deg, var(--pc-purple), var(--pc-magenta));
+            color: var(--pc-white);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(145deg, var(--pc-magenta), var(--pc-cyan));
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--pc-border);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--pc-purple), var(--pc-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .wallet-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .network-pill {
+            padding: 4px 12px;
+            background: var(--pc-gray-2);
+            border: 1px solid var(--pc-border);
+            border-radius: 16px;
+            font-size: 12px;
+            color: var(--pc-text-muted);
+        }
+
+        .network-pill.connected {
+            background: linear-gradient(45deg, var(--pc-purple), var(--pc-cyan));
+            color: var(--pc-white);
+        }
+
+        .hero {
+            text-align: center;
+            padding: 60px 0;
+        }
+
+        .hero h1 {
+            font-size: clamp(36px, 5vw, 64px);
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(45deg, var(--pc-purple), var(--pc-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: var(--pc-text-muted);
+            margin-bottom: 8px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--pc-border);
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: var(--pc-text-muted);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab:hover {
+            color: var(--pc-text);
+        }
+
+        .tab.active {
+            color: var(--pc-cyan);
+            border-bottom-color: var(--pc-cyan);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--pc-text);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 16px;
+            background: var(--pc-gray-1);
+            border: 1px solid var(--pc-border);
+            color: var(--pc-text);
+            font-size: 16px;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--pc-cyan);
+            box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-group .form-input {
+            flex: 1;
+        }
+
+        .token-info {
+            padding: 12px 16px;
+            background: var(--pc-gray-2);
+            border: 1px solid var(--pc-border);
+            margin-top: 8px;
+            font-size: 14px;
+            color: var(--pc-text-muted);
+            clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+        }
+
+        .locks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 24px;
+        }
+
+        .locks-table th,
+        .locks-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--pc-border);
+        }
+
+        .locks-table th {
+            background: var(--pc-gray-2);
+            font-weight: 500;
+            color: var(--pc-text);
+        }
+
+        .locks-table td {
+            color: var(--pc-text-muted);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-badge.active {
+            background: rgba(255, 165, 0, 0.2);
+            color: #ffa500;
+        }
+
+        .status-badge.unlocked {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--pc-gray-1);
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            background: var(--pc-gray-1);
+            border: 1px solid var(--pc-border);
+            z-index: 1001;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            border-color: #22c55e;
+        }
+
+        .toast.error {
+            border-color: #ef4444;
+        }
+
+        .demo-banner {
+            background: linear-gradient(45deg, var(--pc-magenta), var(--pc-purple));
+            color: var(--pc-white);
+            text-align: center;
+            padding: 12px;
+            font-weight: 500;
+        }
+
+        .dev-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: var(--pc-gray-1);
+            padding: 16px;
+            border: 1px solid var(--pc-border);
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .footer {
+            margin-top: 80px;
+            padding: 40px 0;
+            border-top: 1px solid var(--pc-border);
+            text-align: center;
+            color: var(--pc-text-muted);
+            font-size: 14px;
+        }
+
+        .countdown {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--pc-cyan);
+        }
+
+        .gas-estimate {
+            background: var(--pc-gray-3);
+            padding: 12px;
+            margin: 16px 0;
+            border-left: 3px solid var(--pc-cyan);
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .wallet-info {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .locks-table {
+                font-size: 14px;
+            }
+
+            .locks-table th,
+            .locks-table td {
+                padding: 8px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particles"></canvas>
+
+    <div id="demo-banner" class="demo-banner" style="display: none;">
+        DEMO MODE - Contract not deployed
+    </div>
+
+    <div class="container">
+        <header class="header">
+            <div class="logo">pLOCK</div>
+            <div class="wallet-info">
+                <div id="network-pill" class="network-pill">Disconnected</div>
+                <button id="connect-btn" class="btn btn-primary">Connect Wallet</button>
+            </div>
+        </header>
+
+        <section class="hero">
+            <h1>pLOCK</h1>
+            <p>Professional token locking on PulseChain.</p>
+            <p>Secure your tokens with time-based or linear vesting locks.</p>
+        </section>
+
+        <main>
+            <div class="panel" style="padding: 32px;">
+                <div class="tabs">
+                    <button class="tab active" data-tab="token">Token Lock</button>
+                    <button class="tab" data-tab="lp">LP Lock</button>
+                    <button class="tab" data-tab="linear">Linear Vesting</button>
+                </div>
+
+                <div id="tab-token" class="tab-content active">
+                    <div class="form-group">
+                        <label class="form-label" for="token-address">Token Address</label>
+                        <input type="text" id="token-address" class="form-input" placeholder="0x...">
+                        <div id="token-info" class="token-info" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="token-amount">Amount</label>
+                        <div class="input-group">
+                            <input type="text" id="token-amount" class="form-input" placeholder="0.0">
+                            <button id="max-btn" class="btn">Max</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="unlock-time">Unlock Time</label>
+                        <input type="datetime-local" id="unlock-time" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="beneficiary">Beneficiary</label>
+                        <input type="text" id="beneficiary" class="form-input" placeholder="0x... (optional, defaults to your address)">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="notes">Notes (optional)</label>
+                        <input type="text" id="notes" class="form-input" placeholder="Description for this lock">
+                    </div>
+                    <div id="gas-estimate-token" class="gas-estimate" style="display: none;"></div>
+                    <button id="create-token-lock" class="btn btn-primary" style="width: 100%;">Create Token Lock</button>
+                </div>
+
+                <div id="tab-lp" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label" for="lp-address">LP Token Address</label>
+                        <input type="text" id="lp-address" class="form-input" placeholder="0x...">
+                        <div id="lp-info" class="token-info" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="lp-amount">Amount</label>
+                        <div class="input-group">
+                            <input type="text" id="lp-amount" class="form-input" placeholder="0.0">
+                            <button id="lp-max-btn" class="btn">Max</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="lp-unlock-time">Unlock Time</label>
+                        <input type="datetime-local" id="lp-unlock-time" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="lp-beneficiary">Beneficiary</label>
+                        <input type="text" id="lp-beneficiary" class="form-input" placeholder="0x... (optional, defaults to your address)">
+                    </div>
+                    <div id="gas-estimate-lp" class="gas-estimate" style="display: none;"></div>
+                    <button id="create-lp-lock" class="btn btn-primary" style="width: 100%;">Create LP Lock</button>
+                </div>
+
+                <div id="tab-linear" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label" for="linear-token">Token Address</label>
+                        <input type="text" id="linear-token" class="form-input" placeholder="0x...">
+                        <div id="linear-token-info" class="token-info" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="linear-amount">Amount</label>
+                        <div class="input-group">
+                            <input type="text" id="linear-amount" class="form-input" placeholder="0.0">
+                            <button id="linear-max-btn" class="btn">Max</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="start-time">Start Time</label>
+                        <input type="datetime-local" id="start-time" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="end-time">End Time</label>
+                        <input type="datetime-local" id="end-time" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="linear-beneficiary">Beneficiary</label>
+                        <input type="text" id="linear-beneficiary" class="form-input" placeholder="0x... (optional, defaults to your address)">
+                    </div>
+                    <div id="gas-estimate-linear" class="gas-estimate" style="display: none;"></div>
+                    <button id="create-linear-lock" class="btn btn-primary" style="width: 100%;">Create Linear Lock</button>
+                </div>
+            </div>
+
+            <section style="margin-top: 48px;">
+                <h2 style="margin-bottom: 24px; font-size: 24px;">Your Locks</h2>
+                <div class="panel" style="padding: 24px;">
+                    <div style="margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+                        <input type="text" id="search-locks" class="form-input" placeholder="Search by token..." style="max-width: 300px;">
+                        <button id="refresh-locks" class="btn">Refresh</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="locks-table">
+                            <thead>
+                                <tr>
+                                    <th>Lock ID</th>
+                                    <th>Asset</th>
+                                    <th>Amount</th>
+                                    <th>Unlock Time</th>
+                                    <th>Beneficiary</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="locks-table-body">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; padding: 40px;">Connect wallet to view your locks</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>pLOCK v1.0 | Professional token locking on PulseChain</p>
+            <p style="margin-top: 8px;">Links • Documentation • Support</p>
+        </footer>
+    </div>
+
+    <div id="network-modal" class="modal">
+        <div class="modal-content panel" style="padding: 24px;">
+            <h3 style="margin-bottom: 16px;">Switch to PulseChain</h3>
+            <p style="margin-bottom: 24px; color: var(--pc-text-muted);">This app requires PulseChain network. Please switch to PulseChain to continue.</p>
+            <button id="switch-network" class="btn btn-primary" style="width: 100%;">Switch Network</button>
+        </div>
+    </div>
+
+    <div id="toast" class="toast panel"></div>
+
+    <div id="dev-panel" class="dev-panel panel">
+        <div>Provider: <span id="dev-provider">None</span></div>
+        <div>Chain ID: <span id="dev-chain">None</span></div>
+        <div>Last Error: <span id="dev-error">None</span></div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            chainId: 369,
+            rpcUrl: 'https://rpc.pulsechain.com',
+            explorer: 'https://scan.pulsechain.com',
+            lockerAddress: '0x0000000000000000000000000000000000000000' // replace with real address
+        };
+
+        const LOCKER_ABI = [
+            "function lock(address token, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
+            "function lockLinear(address token, uint256 amount, uint64 start, uint64 end, address beneficiary) returns (uint256 lockId)",
+            "function lockLP(address pair, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
+            "function getLock(uint256 lockId) view returns (address token, uint256 amount, uint64 unlockTime, address owner, address beneficiary, bool withdrawn)",
+            "function withdraw(uint256 lockId)",
+            "event Locked(uint256 indexed lockId, address indexed token, address indexed owner, uint256 amount, uint64 unlockTime, address beneficiary)",
+            "event Withdrawn(uint256 indexed lockId, address indexed token, address indexed owner)"
+        ];
+
+        const ERC20_ABI = [
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+            "function balanceOf(address) view returns (uint256)",
+            "function allowance(address owner, address spender) view returns (uint256)",
+            "function approve(address spender, uint256 amount) returns (bool)"
+        ];
+
+        const PAIR_ABI = [
+            "function token0() view returns (address)",
+            "function token1() view returns (address)",
+            "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+            "function balanceOf(address) view returns (uint256)"
+        ];
+
+        const state = {
+            provider: null,
+            signer: null,
+            account: null,
+            chainId: null,
+            demoMode: CONFIG.lockerAddress === '0x0000000000000000000000000000000000000000',
+            locks: [],
+            lockIdCounter: 1,
+            tokenMetadata: new Map(),
+            countdownIntervals: new Set()
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initParticles();
+            setupEventListeners();
+            updateDevPanel();
+            
+            if (state.demoMode) {
+                document.getElementById('demo-banner').style.display = 'block';
+            }
+
+            // Auto-connect if previously connected
+            if (window.ethereum && window.ethereum.selectedAddress) {
+                await connectWallet();
+            }
+        });
+
+        // Initialize particles background
+        async function initParticles() {
+            try {
+                await tsParticles.load("particles", {
+                    fullScreen: false,
+                    particles: {
+                        number: { value: 50 },
+                        color: { value: ["#7a3cff", "#ff00e0", "#00e5ff"] },
+                        shape: { type: "circle" },
+                        opacity: { value: 0.3 },
+                        size: { value: 2 },
+                        move: {
+                            enable: true,
+                            speed: 0.5,
+                            direction: "none",
+                            random: true,
+                            straight: false,
+                            outModes: "out"
+                        },
+                        links: {
+                            enable: true,
+                            distance: 150,
+                            color: "#7a3cff",
+                            opacity: 0.2,
+                            width: 1
+                        }
+                    },
+                    interactivity: {
+                        detectsOn: "window",
+                        events: {
+                            onHover: { enable: true, mode: "repulse" },
+                            resize: true
+                        },
+                        modes: {
+                            repulse: { distance: 100, duration: 0.4 }
+                        }
+                    },
+                    detectRetina: true
+                });
+            } catch (error) {
+                console.error('Failed to initialize particles:', error);
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+
+            // Token address inputs
+            document.getElementById('token-address').addEventListener('blur', () => readTokenInfo('token'));
+            document.getElementById('lp-address').addEventListener('blur', () => readTokenInfo('lp'));
+            document.getElementById('linear-token').addEventListener('blur', () => readTokenInfo('linear'));
+
+            // Max buttons
+            document.getElementById('max-btn').addEventListener('click', () => setMaxAmount('token'));
+            document.getElementById('lp-max-btn').addEventListener('click', () => setMaxAmount('lp'));
+            document.getElementById('linear-max-btn').addEventListener('click', () => setMaxAmount('linear'));
+
+            // Create lock buttons
+            document.getElementById('create-token-lock').addEventListener('click', createTokenLock);
+            document.getElementById('create-lp-lock').addEventListener('click', createLPLock);
+            document.getElementById('create-linear-lock').addEventListener('click', createLinearLock);
+
+            // Refresh locks
+            document.getElementById('refresh-locks').addEventListener('click', loadMyLocks);
+
+            // Search functionality
+            document.getElementById('search-locks').addEventListener('input', filterLocks);
+
+            // Modal close on outside click
+            document.getElementById('network-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'network-modal') {
+                    e.target.classList.remove('show');
+                }
+            });
+
+            // Initialize Lucide icons
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+            
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        // Toast system
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast panel ${type}`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+
+        // Development panel
+        function updateDevPanel() {
+            if (new URLSearchParams(window.location.search).get('dev') === '1') {
+                const devPanel = document.getElementById('dev-panel');
+                devPanel.style.display = 'block';
+                document.getElementById('dev-provider').textContent = state.provider ? 'Connected' : 'None';
+                document.getElementById('dev-chain').textContent = state.chainId || 'None';
+            }
+        }
+
+        // Wallet connection
+        async function connectWallet() {
+            try {
+                if (typeof window.ethereum === 'undefined') {
+                    showToast('Please install MetaMask or another Web3 wallet', 'error');
+                    return;
+                }
+
+                state.provider = new ethers.BrowserProvider(window.ethereum);
+                await state.provider.send('eth_requestAccounts', []);
+                state.signer = await state.provider.getSigner();
+                state.account = await state.signer.getAddress();
+                
+                const network = await state.provider.getNetwork();
+                state.
