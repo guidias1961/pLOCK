@@ -239,11 +239,11 @@ const CONFIG = {
   chainId: 369,
   rpcUrl: 'https://rpc.pulsechain.com',
   explorer: 'https://scan.pulsechain.com',
-  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d', // seu deploy
+  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d',
   deploymentBlock: 0
 };
 
-// ?locker=0x...
+// Permite override via querystring e persiste
 (function bootLockerAddr(){
   try{
     const q = new URLSearchParams(location.search).get('locker');
@@ -487,6 +487,7 @@ async function setMaxAmount(type){
   }catch{ showToast('Failed to read balance','error'); }
 }
 
+// approve com fallback de zerar antes (para tokens que exigem)
 async function checkAndApprove(tokenAddress, amount, spender){
   try{
     const c=new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
@@ -495,6 +496,9 @@ async function checkAndApprove(tokenAddress, amount, spender){
     const allowance=await c.allowance(state.account, spender);
     if (allowance < amountWei){
       showToast('Approval required...','info');
+      if (allowance > 0n){
+        try{ const tx0=await c.approve(spender, 0n); await tx0.wait(); }catch{}
+      }
       const tx=await c.approve(spender, amountWei);
       await tx.wait(); await new Promise(r=>setTimeout(r,600));
       showToast('Approval successful','success');
@@ -526,12 +530,20 @@ function showGasEstimate(type, gasEstimate, gasCost){
   el.style.display='block';
 }
 
-// ------- envio robusto usando populateTransaction -------
-async function sendViaPopulate(fnName, args, gasLimit){
+// ------- envio robusto (primeiro contract.call, fallback encode) -------
+async function sendContractTx(fnName, args, gasLimit){
   const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-  const pop = await ctr.populateTransaction[fnName](...args);
-  const tx = await state.signer.sendTransaction({ ...pop, gasLimit });
-  return tx;
+  try{
+    const tx = await ctr[fnName](...args, { gasLimit });
+    return tx;
+  }catch(e1){
+    try{
+      const data = ctr.interface.encodeFunctionData(fnName, args);
+      return await state.signer.sendTransaction({ to: CONFIG.lockerAddress, data, gasLimit });
+    }catch(e2){
+      throw (e2 || e1);
+    }
+  }
 }
 
 // ------- CREATEs -------
@@ -560,7 +572,7 @@ async function createTokenLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
-    const tx=await sendViaPopulate('lock', params, 400000n);
+    const tx=await sendContractTx('lock', params, 400000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Lock created!','success');
     await loadMyLocks(); clearForm('token');
@@ -597,7 +609,7 @@ async function createLPLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
     showGasEstimate('lp', gasEstimate, gasCost);
 
-    const tx=await sendViaPopulate('lockLP', params, 400000n);
+    const tx=await sendContractTx('lockLP', params, 400000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('LP Lock created!','success');
     await loadMyLocks(); clearForm('lp');
@@ -636,7 +648,7 @@ async function createLinearLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
     showGasEstimate('linear', gasEstimate, gasCost);
 
-    const tx=await sendViaPopulate('lockLinear', params, 600000n);
+    const tx=await sendContractTx('lockLinear', params, 600000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Linear Lock created!','success');
     await loadMyLocks(); clearForm('linear');
@@ -787,7 +799,7 @@ async function withdrawLock(lockId){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
   try{
-    const tx = await sendViaPopulate('withdraw', [lockId], 120000n);
+    const tx = await sendContractTx('withdraw', [lockId], 120000n);
     showToast(`Withdrawal sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Withdrawal successful!','success');
     await loadMyLocks();
