@@ -438,7 +438,6 @@ async function readTokenMeta(address){
   if (!ethers.isAddress(address)) throw new Error('Invalid address');
   const erc=new ethers.Contract(address, ERC20_ABI, state.provider);
   const [name,symbol,decimals]=await Promise.all([erc.name(),erc.symbol(),erc.decimals()]);
-
   let isLP=false, pairInfo=null;
   try{
     const pair=new ethers.Contract(address, PAIR_ABI, state.provider);
@@ -448,7 +447,6 @@ async function readTokenMeta(address){
     const [s0,s1]=await Promise.all([t0c.symbol(), t1c.symbol()]);
     pairInfo={ token0Symbol:s0, token1Symbol:s1 }; isLP=true;
   }catch{}
-
   const md={ name,symbol,decimals,isLP,pairInfo };
   state.tokenMetadata.set(address.toLowerCase(), md);
   return md;
@@ -519,28 +517,12 @@ function showGasEstimate(type, gasEstimate, gasCost){
   el.style.display='block';
 }
 
-// --- envio garantido COM data ---
-async function populateAndSend(ctrFn, args, fallbackGas){
-  // ctrFn é algo como: contract.lock  (a função do contrato)
-  const pop = await ctrFn.populateTransaction(...args);
-  if (!pop || !pop.data) throw new Error('populateTransaction returned empty data');
-  const txReq = {
-    to: pop.to,                // endereço do locker
-    data: pop.data,            // calldata do método
-    gasLimit: pop.gasLimit ?? fallbackGas,
-    value: 0n                  // sempre zero; evita envios de PLS por engano
-  };
-  try {
-    return await state.signer.sendTransaction(txReq);
-  } catch (e) {
-    // se a wallet reclamar de gas baixo, força o fallback
-    const msg = String(e?.message || '');
-    if (msg.includes('intrinsic') || msg.includes('gas') || msg.includes('underpriced')) {
-      txReq.gasLimit = fallbackGas;
-      return await state.signer.sendTransaction(txReq);
-    }
-    throw e;
-  }
+// --- Envio codificando manualmente a calldata ---
+const lockerInterface = new ethers.Interface(LOCKER_ABI);
+async function encodeAndSend(fnName, args, fallbackGas){
+  const data = lockerInterface.encodeFunctionData(fnName, args);
+  const txReq = { to: CONFIG.lockerAddress, data, value: 0n, gasLimit: fallbackGas };
+  return await state.signer.sendTransaction(txReq);
 }
 
 // --- CREATEs ---
@@ -569,8 +551,7 @@ async function createTokenLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
-    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const tx=await populateAndSend(ctr.lock, params, 400000n);
+    const tx=await encodeAndSend('lock', params, 400000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Lock created!','success');
     await loadMyLocks(); clearForm('token');
@@ -607,8 +588,7 @@ async function createLPLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
     showGasEstimate('lp', gasEstimate, gasCost);
 
-    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const tx=await populateAndSend(ctr.lockLP, params, 400000n);
+    const tx=await encodeAndSend('lockLP', params, 400000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('LP Lock created!','success');
     await loadMyLocks(); clearForm('lp');
@@ -647,8 +627,7 @@ async function createLinearLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
     showGasEstimate('linear', gasEstimate, gasCost);
 
-    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const tx=await populateAndSend(ctr.lockLinear, params, 600000n);
+    const tx=await encodeAndSend('lockLinear', params, 600000n);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Linear Lock created!','success');
     await loadMyLocks(); clearForm('linear');
@@ -689,7 +668,7 @@ function clearForm(type){
   const infoId=type==='linear'?'linear-token-info': type==='lp'?'lp-info':'token-info';
   const gasId=`gas-estimate-${type}`;
   const infoEl=document.getElementById(infoId); if (infoEl) infoEl.style.display='none';
-  const gasEl=document.getElementById(gasId); if (gasEl) gasEl.style.display='none';
+  const gasEl=document.getElementById(gasId); if (gasEl) el.style.display='none';
 }
 
 async function loadMyLocks(){
@@ -799,9 +778,7 @@ async function withdrawLock(lockId){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
   try{
-    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const pop = await ctr.withdraw.populateTransaction(lockId);
-    const tx = await state.signer.sendTransaction({ to: pop.to, data: pop.data, gasLimit: pop.gasLimit ?? 120000n, value: 0n });
+    const tx = await encodeAndSend('withdraw', [lockId], 120000n);
     showToast(`Withdrawal sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Withdrawal successful!','success');
     await loadMyLocks();
