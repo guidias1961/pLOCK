@@ -120,6 +120,7 @@
               <input id="token-amount" class="form-input" placeholder="0.0"/>
               <button id="max-btn" class="btn">Max</button>
             </div>
+            <div id="precheck-token" class="token-info" style="display:none;"></div>
           </div>
           <div class="form-group">
             <label class="form-label" for="unlock-time">Unlock Time</label>
@@ -146,6 +147,7 @@
               <input id="lp-amount" class="form-input" placeholder="0.0"/>
               <button id="lp-max-btn" class="btn">Max</button>
             </div>
+            <div id="precheck-lp" class="token-info" style="display:none;"></div>
           </div>
           <div class="form-group">
             <label class="form-label" for="lp-unlock-time">Unlock Time</label>
@@ -168,6 +170,7 @@
               <input id="linear-amount" class="form-input" placeholder="0.0"/>
               <button id="linear-max-btn" class="btn">Max</button>
             </div>
+            <div id="precheck-linear" class="token-info" style="display:none;"></div>
           </div>
           <div class="form-group">
             <label class="form-label" for="start-time">Start Time</label>
@@ -440,6 +443,8 @@ async function readTokenMeta(address){
   if (!ethers.isAddress(address)) throw new Error('Invalid address');
   const erc=new ethers.Contract(address, ERC20_ABI, state.provider);
   const [name,symbol,decimals]=await Promise.all([erc.name(),erc.symbol(),erc.decimals()]);
+
+  // tenta reconhecer LP
   let isLP=false, pairInfo=null;
   try{
     const pair=new ethers.Contract(address, PAIR_ABI, state.provider);
@@ -449,6 +454,7 @@ async function readTokenMeta(address){
     const [s0,s1]=await Promise.all([t0c.symbol(), t1c.symbol()]);
     pairInfo={ token0Symbol:s0, token1Symbol:s1 }; isLP=true;
   }catch{}
+
   const md={ name,symbol,decimals,isLP,pairInfo };
   state.tokenMetadata.set(address.toLowerCase(), md);
   return md;
@@ -480,20 +486,57 @@ async function setMaxAmount(type){
   }catch{ showToast('Failed to read balance','error'); }
 }
 
-async function checkAndApprove(tokenAddress, amount, spender){
+// ---- SAFE APPROVE ROBUSTO ----
+async function safeApprove(tokenAddress, amountWei, spender){
+  const c=new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
+  const allowance = await c.allowance(state.account, spender);
+
+  // se já tiver allowance suficiente, não faz nada
+  if (allowance >= amountWei) return true;
+
   try{
-    const c=new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
-    const dec=await c.decimals();
-    const amountWei=ethers.parseUnits(amount, dec);
-    const allowance=await c.allowance(state.account, spender);
-    if (allowance < amountWei){
-      showToast('Approval required...','info');
-      const tx=await c.approve(spender, amountWei);
-      await tx.wait(); await new Promise(r=>setTimeout(r,600));
-      showToast('Approval successful','success');
-    }
+    // tenta aprovar MAX direto (mais amigável para futuras operações)
+    const tx1 = await c.approve(spender, ethers.MaxUint256);
+    await tx1.wait();
     return true;
-  }catch(e){ showToast(`Approval failed: ${e.message}`,'error'); return false; }
+  }catch(e1){
+    // alguns tokens (USDT-like) exigem zerar antes
+    try{
+      const txz = await c.approve(spender, 0);
+      await txz.wait();
+      const tx2 = await c.approve(spender, ethers.MaxUint256);
+      await tx2.wait();
+      return true;
+    }catch(e2){
+      showToast(`Approval failed: ${e2.message||e1.message}`,'error');
+      return false;
+    }
+  }
+}
+
+async function checkPreconditions(tokenAddr, amountStr){
+  const md = await readTokenMeta(tokenAddr);
+  const amountWei = ethers.parseUnits(amountStr, md.decimals);
+  const erc = new ethers.Contract(tokenAddr, ERC20_ABI, state.provider);
+
+  const [bal, allowance] = await Promise.all([
+    erc.balanceOf(state.account),
+    erc.allowance(state.account, CONFIG.lockerAddress)
+  ]);
+
+  const infoElId = md.isLP ? 'precheck-lp' : (tokenAddr === document.getElementById('linear-token')?.value.trim() ? 'precheck-linear' : 'precheck-token');
+  const infoEl = document.getElementById(infoElId);
+  const balFmt = ethers.formatUnits(bal, md.decimals);
+  const needFmt = ethers.formatUnits(amountWei, md.decimals);
+  const allFmt = ethers.formatUnits(allowance, md.decimals);
+
+  let ok = true, msgs=[];
+  if (bal < amountWei){ ok=false; msgs.push(`Insufficient balance. You have ${balFmt}, need ${needFmt}.`); }
+  if (allowance < amountWei){ msgs.push(`Allowance for locker is ${allFmt} (need ${needFmt}). Will request approval.`); }
+  infoEl.textContent = msgs.join(' ');
+  infoEl.style.display = msgs.length ? 'block' : 'none';
+
+  return { okBalance: bal >= amountWei, okAllowance: allowance >= amountWei, amountWei, decimals: md.decimals, symbol: md.symbol };
 }
 
 async function estimateGasForLock(type, params){
@@ -508,18 +551,24 @@ async function estimateGasForLock(type, params){
     if (priceWei==null) return { gasEstimate:gas, gasCost:'N/A' };
     const total=gas*priceWei;
     return { gasEstimate:gas, gasCost:ethers.formatEther(total) };
-  }catch(e){ console.warn('estimate fail (continuing):', e); return { gasEstimate:'N/A', gasCost:'N/A' }; }
+  }catch(e){ console.warn('estimate fail (continuing):', e); return { gasEstimate:null, gasCost:'N/A' }; }
 }
 
 function showGasEstimate(type, gasEstimate, gasCost){
   const el=document.getElementById(`gas-estimate-${type}`);
-  const str=typeof gasEstimate==='bigint'?gasEstimate.toString():String(gasEstimate??'');
+  const str=gasEstimate ? (typeof gasEstimate==='bigint'?gasEstimate.toString():String(gasEstimate)) : 'N/A';
   const n=Number(str);
   el.innerHTML=`<strong>Gas Estimate:</strong> ${Number.isFinite(n)?n.toLocaleString():str} units<br><strong>Estimated Cost:</strong> ${gasCost==='N/A'?'N/A':`~${gasCost} PLS`}`;
   el.style.display='block';
 }
 
-// ----------------- CREATEs (sempre via contract.method) -----------------
+function fallbackGas(type){
+  if (type==='linear') return 600000n;
+  if (type==='lp') return 450000n;
+  return 350000n;
+}
+
+// ----------------- CREATEs -----------------
 async function createTokenLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
@@ -533,26 +582,36 @@ async function createTokenLock(){
   try{
     btn.disabled=true; btn.textContent='Creating...';
 
-    const ok=await checkAndApprove(address, amount, CONFIG.lockerAddress);
-    if (!ok) return;
+    const md = await readTokenMeta(address);
+    const amountWei = ethers.parseUnits(amount, md.decimals);
 
-    const md=await readTokenMeta(address);
-    const amountWei=ethers.parseUnits(amount, md.decimals);
+    // pré-checagens
+    const pre = await checkPreconditions(address, amount);
+    if (!pre.okBalance){ showToast('Insufficient token balance','error'); return; }
+
+    // approvals (se necessário)
+    if (!pre.okAllowance){
+      const ok = await safeApprove(address, amountWei, CONFIG.lockerAddress);
+      if (!ok) return;
+    }
+
+    // monta params
     const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
     const unlockUnix=Math.floor(ts/1000);
     const params=[address, amountWei, unlockUnix, state.account];
 
+    // estima (opcional) e envia
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const overrides = (gasEstimate && typeof gasEstimate === 'bigint') ? { gasLimit: gasEstimate + 50000n } : {};
+    const overrides = gasEstimate ? { gasLimit: gasEstimate + 50000n } : { gasLimit: fallbackGas('token') };
     const tx=await ctr.lock(...params, overrides);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Lock created!','success');
     await loadMyLocks(); clearForm('token');
   }catch(e){
-    showToast(`Failed to create lock: ${e.message}`,'error');
+    showToast(`Failed to create lock: ${e.shortMessage||e.message}`,'error');
     document.getElementById('dev-error').textContent=e.message||String(e);
   }finally{
     btn.disabled=false; btn.textContent='Create Token Lock';
@@ -572,11 +631,16 @@ async function createLPLock(){
   try{
     btn.disabled=true; btn.textContent='Creating...';
 
-    const ok=await checkAndApprove(address, amount, CONFIG.lockerAddress);
-    if (!ok) return;
+    const md = await readTokenMeta(address);
+    const amountWei = ethers.parseUnits(amount, md.decimals);
 
-    const md=await readTokenMeta(address);
-    const amountWei=ethers.parseUnits(amount, md.decimals);
+    const pre = await checkPreconditions(address, amount);
+    if (!pre.okBalance){ showToast('Insufficient LP balance','error'); return; }
+    if (!pre.okAllowance){
+      const ok = await safeApprove(address, amountWei, CONFIG.lockerAddress);
+      if (!ok) return;
+    }
+
     const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
     const unlockUnix=Math.floor(ts/1000);
     const params=[address, amountWei, unlockUnix, state.account];
@@ -585,13 +649,13 @@ async function createLPLock(){
     showGasEstimate('lp', gasEstimate, gasCost);
 
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const overrides = (gasEstimate && typeof gasEstimate === 'bigint') ? { gasLimit: gasEstimate + 50000n } : {};
+    const overrides = gasEstimate ? { gasLimit: gasEstimate + 50000n } : { gasLimit: fallbackGas('lp') };
     const tx=await ctr.lockLP(...params, overrides);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('LP Lock created!','success');
     await loadMyLocks(); clearForm('lp');
   }catch(e){
-    showToast(`Failed to create LP lock: ${e.message}`,'error');
+    showToast(`Failed to create LP lock: ${e.shortMessage||e.message}`,'error');
     document.getElementById('dev-error').textContent=e.message||String(e);
   }finally{
     btn.disabled=false; btn.textContent='Create LP Lock';
@@ -612,11 +676,16 @@ async function createLinearLock(){
   try{
     btn.disabled=true; btn.textContent='Creating...';
 
-    const ok=await checkAndApprove(address, amount, CONFIG.lockerAddress);
-    if (!ok) return;
+    const md = await readTokenMeta(address);
+    const amountWei = ethers.parseUnits(amount, md.decimals);
 
-    const md=await readTokenMeta(address);
-    const amountWei=ethers.parseUnits(amount, md.decimals);
+    const pre = await checkPreconditions(address, amount);
+    if (!pre.okBalance){ showToast('Insufficient token balance','error'); return; }
+    if (!pre.okAllowance){
+      const ok = await safeApprove(address, amountWei, CONFIG.lockerAddress);
+      if (!ok) return;
+    }
+
     const tStart=Date.parse(startTime), tEnd=Date.parse(endTime);
     if (!Number.isFinite(tStart)||!Number.isFinite(tEnd)){ showToast('Invalid start or end time','error'); return; }
     const startUnix=Math.floor(tStart/1000), endUnix=Math.floor(tEnd/1000);
@@ -626,13 +695,13 @@ async function createLinearLock(){
     showGasEstimate('linear', gasEstimate, gasCost);
 
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-    const overrides = (gasEstimate && typeof gasEstimate === 'bigint') ? { gasLimit: gasEstimate + 80000n } : {};
+    const overrides = gasEstimate ? { gasLimit: gasEstimate + 80000n } : { gasLimit: fallbackGas('linear') };
     const tx=await ctr.lockLinear(...params, overrides);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Linear Lock created!','success');
     await loadMyLocks(); clearForm('linear');
   }catch(e){
-    showToast(`Failed to create linear lock: ${e.message}`,'error');
+    showToast(`Failed to create linear lock: ${e.shortMessage||e.message}`,'error');
     document.getElementById('dev-error').textContent=e.message||String(e);
   }finally{
     btn.disabled=false; btn.textContent='Create Linear Lock';
@@ -667,8 +736,10 @@ function clearForm(type){
   fields[type].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
   const infoId=type==='linear'?'linear-token-info': type==='lp'?'lp-info':'token-info';
   const gasId=`gas-estimate-${type}`;
+  const preId=`precheck-${type}`;
   const infoEl=document.getElementById(infoId); if (infoEl) infoEl.style.display='none';
   const gasEl=document.getElementById(gasId); if (gasEl) gasEl.style.display='none';
+  const preEl=document.getElementById(preId); if (preEl) preEl.style.display='none';
 }
 
 async function loadMyLocks(){
