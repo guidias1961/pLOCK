@@ -243,7 +243,7 @@ const CONFIG = {
   deploymentBlock: 0
 };
 
-// permite trocar por query ?locker=0x...
+// ?locker=0x...
 (function bootLockerAddr(){
   try{
     const q = new URLSearchParams(location.search).get('locker');
@@ -295,7 +295,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       const accs = await window.ethereum.request({ method:'eth_accounts' });
       if (accs && accs.length) await connectWallet();
-      // listeners para trocas de conta/rede
       window.ethereum.on?.('accountsChanged', ()=>connectWallet().catch(()=>{}));
       window.ethereum.on?.('chainChanged',   ()=>connectWallet().catch(()=>{}));
     }catch{}
@@ -320,7 +319,7 @@ async function initParticles(){
 
 function setupEventListeners(){
   document.querySelectorAll('.tab').forEach(tab=>{
-    tab.addEventListener('click',()=>switchTab(tab.dataset.tab),{once:false});
+    tab.addEventListener('click',()=>switchTab(tab.dataset.tab));
   });
 
   document.getElementById('token-address').addEventListener('blur',()=>readTokenInfo('token'));
@@ -520,35 +519,7 @@ function showGasEstimate(type, gasEstimate, gasCost){
   el.style.display='block';
 }
 
-// --- Envio SEMPRE com "data" + fallback seguro ---
-async function sendViaPopulate(fnName, args, fallbackGas){
-  const ctr = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
-  const txReq = await ctr[fnName].populateTransaction(...args);
-
-  if (!txReq.to) txReq.to = CONFIG.lockerAddress;
-  if (!txReq.gasLimit && fallbackGas) txReq.gasLimit = fallbackGas;
-
-  // Log no Dev Panel (quando ?dev=1)
-  try{
-    if (new URLSearchParams(location.search).get('dev')==='1') {
-      console.log('[populate]', fnName, { args, txReq });
-      document.getElementById('dev-error').textContent =
-        `populate ok: data=${(txReq.data||'').slice(0,10)}..., gas=${String(txReq.gasLimit||'')}`;
-    }
-  }catch{}
-
-  // Guarda de segurança: nunca envie sem data
-  if (!txReq.data || txReq.data === '0x' || txReq.data === '') {
-    if (new URLSearchParams(location.search).get('dev')==='1') {
-      console.warn('populate sem data; usando call direto', fnName, args);
-    }
-    const overrides = fallbackGas ? { gasLimit: fallbackGas } : {};
-    return await ctr[fnName](...args, overrides);
-  }
-  return await state.signer.sendTransaction(txReq);
-}
-
-// --- CREATEs ---
+// ----------------- CREATEs (sempre via contract.method) -----------------
 async function createTokenLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
@@ -574,7 +545,9 @@ async function createTokenLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
-    const tx=await sendViaPopulate('lock', params, 400000n);
+    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+    const overrides = (gasEstimate && typeof gasEstimate === 'bigint') ? { gasLimit: gasEstimate + 50000n } : {};
+    const tx=await ctr.lock(...params, overrides);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Lock created!','success');
     await loadMyLocks(); clearForm('token');
@@ -611,7 +584,9 @@ async function createLPLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
     showGasEstimate('lp', gasEstimate, gasCost);
 
-    const tx=await sendViaPopulate('lockLP', params, 400000n);
+    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+    const overrides = (gasEstimate && typeof gasEstimate === 'bigint') ? { gasLimit: gasEstimate + 50000n } : {};
+    const tx=await ctr.lockLP(...params, overrides);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('LP Lock created!','success');
     await loadMyLocks(); clearForm('lp');
@@ -650,7 +625,9 @@ async function createLinearLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
     showGasEstimate('linear', gasEstimate, gasCost);
 
-    const tx=await sendViaPopulate('lockLinear', params, 600000n);
+    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+    const overrides = (gasEstimate && typeof gasEstimate === 'bigint') ? { gasLimit: gasEstimate + 80000n } : {};
+    const tx=await ctr.lockLinear(...params, overrides);
     showToast(`Transaction sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Linear Lock created!','success');
     await loadMyLocks(); clearForm('linear');
@@ -801,7 +778,8 @@ async function withdrawLock(lockId){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
   try{
-    const tx = await sendViaPopulate('withdraw', [lockId], 120000n);
+    const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
+    const tx = await ctr.withdraw(lockId);
     showToast(`Withdrawal sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Withdrawal successful!','success');
     await loadMyLocks();
