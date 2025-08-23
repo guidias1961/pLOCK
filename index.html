@@ -235,16 +235,15 @@
   </div>
 
   <script>
-/* -------------------- CONFIG -------------------- */
 const CONFIG = {
   chainId: 369,
   rpcUrl: 'https://rpc.pulsechain.com',
   explorer: 'https://scan.pulsechain.com',
-  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d', // seu deploy novo
+  lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d',
   deploymentBlock: 0
 };
 
-// ?locker=0x... (permite trocar sem rebuild)
+// permite trocar por query ?locker=0x...
 (function bootLockerAddr(){
   try{
     const q = new URLSearchParams(location.search).get('locker');
@@ -254,7 +253,6 @@ const CONFIG = {
   }catch(e){}
 })();
 
-/* -------------------- ABIs -------------------- */
 const LOCKER_ABI = [
   "function lock(address token, uint256 amount, uint64 unlockTime, address beneficiary) returns (uint256 lockId)",
   "function lockLinear(address token, uint256 amount, uint64 start, uint64 end, address beneficiary) returns (uint256 lockId)",
@@ -283,13 +281,11 @@ const PAIR_ABI = [
   "function balanceOf(address) view returns (uint256)"
 ];
 
-/* -------------------- STATE -------------------- */
 const state = {
   provider:null, signer:null, account:null, chainId:null,
   locks:[], tokenMetadata:new Map(), countdownIntervals:new Set()
 };
 
-/* -------------------- BOOT -------------------- */
 document.addEventListener('DOMContentLoaded', async () => {
   await initParticles();
   setupEventListeners();
@@ -299,11 +295,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       const accs = await window.ethereum.request({ method:'eth_accounts' });
       if (accs && accs.length) await connectWallet();
+      // listeners para trocas de conta/rede
+      window.ethereum.on?.('accountsChanged', ()=>connectWallet().catch(()=>{}));
+      window.ethereum.on?.('chainChanged',   ()=>connectWallet().catch(()=>{}));
     }catch{}
   }
 });
 
-/* -------------------- UI BASICS -------------------- */
 async function initParticles(){
   try{
     await tsParticles.load("particles",{
@@ -322,7 +320,7 @@ async function initParticles(){
 
 function setupEventListeners(){
   document.querySelectorAll('.tab').forEach(tab=>{
-    tab.addEventListener('click',()=>switchTab(tab.dataset.tab));
+    tab.addEventListener('click',()=>switchTab(tab.dataset.tab),{once:false});
   });
 
   document.getElementById('token-address').addEventListener('blur',()=>readTokenInfo('token'));
@@ -345,11 +343,6 @@ function setupEventListeners(){
   });
 
   if (typeof lucide!=='undefined'){ lucide.createIcons(); }
-
-  if (window.ethereum){
-    window.ethereum.on?.('accountsChanged', ()=>connectWallet());
-    window.ethereum.on?.('chainChanged', ()=>connectWallet());
-  }
 }
 
 function switchTab(name){
@@ -373,7 +366,6 @@ function updateDevPanel(){
   }
 }
 
-/* -------------------- WALLET -------------------- */
 async function connectWallet(){
   try{
     if (typeof window.ethereum==='undefined'){ showToast('Please install MetaMask or another Web3 wallet','error'); return; }
@@ -445,7 +437,6 @@ async function ensurePulseChain(){
   });
 }
 
-/* -------------------- TOKEN HELPERS -------------------- */
 async function readTokenMeta(address){
   if (!ethers.isAddress(address)) throw new Error('Invalid address');
   const erc=new ethers.Contract(address, ERC20_ABI, state.provider);
@@ -499,18 +490,13 @@ async function checkAndApprove(tokenAddress, amount, spender){
     if (allowance < amountWei){
       showToast('Approval required...','info');
       const tx=await c.approve(spender, amountWei);
-      await tx.wait();
-      // pequena espera para indexação de nonce em algumas carteiras
-      await new Promise(r=>setTimeout(r,500));
-      const newAllowance=await c.allowance(state.account, spender);
-      if (newAllowance < amountWei) { showToast('Approval not reflected yet. Try again.','error'); return false; }
+      await tx.wait(); await new Promise(r=>setTimeout(r,600));
       showToast('Approval successful','success');
     }
     return true;
   }catch(e){ showToast(`Approval failed: ${e.message}`,'error'); return false; }
 }
 
-/* -------------------- GAS ESTIMATE (opcional) -------------------- */
 async function estimateGasForLock(type, params){
   try{
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
@@ -534,24 +520,35 @@ function showGasEstimate(type, gasEstimate, gasCost){
   el.style.display='block';
 }
 
-/* -------------------- ENVIO (sempre com data) -------------------- */
-function toUint64(x){ // garante compatibilidade
-  const bn = BigInt(x);
-  if (bn < 0n || bn > 0xFFFFFFFFFFFFFFFFn) throw new Error('time out of uint64');
-  return bn;
-}
-
-// Envia usando populateTransaction p/ sempre incluir "data"
+// --- Envio SEMPRE com "data" + fallback seguro ---
 async function sendViaPopulate(fnName, args, fallbackGas){
   const ctr = new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
   const txReq = await ctr[fnName].populateTransaction(...args);
+
   if (!txReq.to) txReq.to = CONFIG.lockerAddress;
   if (!txReq.gasLimit && fallbackGas) txReq.gasLimit = fallbackGas;
-  // txReq.data SEMPRE vem preenchido aqui
+
+  // Log no Dev Panel (quando ?dev=1)
+  try{
+    if (new URLSearchParams(location.search).get('dev')==='1') {
+      console.log('[populate]', fnName, { args, txReq });
+      document.getElementById('dev-error').textContent =
+        `populate ok: data=${(txReq.data||'').slice(0,10)}..., gas=${String(txReq.gasLimit||'')}`;
+    }
+  }catch{}
+
+  // Guarda de segurança: nunca envie sem data
+  if (!txReq.data || txReq.data === '0x' || txReq.data === '') {
+    if (new URLSearchParams(location.search).get('dev')==='1') {
+      console.warn('populate sem data; usando call direto', fnName, args);
+    }
+    const overrides = fallbackGas ? { gasLimit: fallbackGas } : {};
+    return await ctr[fnName](...args, overrides);
+  }
   return await state.signer.sendTransaction(txReq);
 }
 
-/* -------------------- CREATEs -------------------- */
+// --- CREATEs ---
 async function createTokenLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
@@ -571,7 +568,7 @@ async function createTokenLock(){
     const md=await readTokenMeta(address);
     const amountWei=ethers.parseUnits(amount, md.decimals);
     const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
-    const unlockUnix=toUint64(Math.floor(ts/1000));
+    const unlockUnix=Math.floor(ts/1000);
     const params=[address, amountWei, unlockUnix, state.account];
 
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
@@ -583,7 +580,7 @@ async function createTokenLock(){
     await loadMyLocks(); clearForm('token');
   }catch(e){
     showToast(`Failed to create lock: ${e.message}`,'error');
-    document.getElementById('dev-error').textContent=e.message;
+    document.getElementById('dev-error').textContent=e.message||String(e);
   }finally{
     btn.disabled=false; btn.textContent='Create Token Lock';
   }
@@ -608,7 +605,7 @@ async function createLPLock(){
     const md=await readTokenMeta(address);
     const amountWei=ethers.parseUnits(amount, md.decimals);
     const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
-    const unlockUnix=toUint64(Math.floor(ts/1000));
+    const unlockUnix=Math.floor(ts/1000);
     const params=[address, amountWei, unlockUnix, state.account];
 
     const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
@@ -620,7 +617,7 @@ async function createLPLock(){
     await loadMyLocks(); clearForm('lp');
   }catch(e){
     showToast(`Failed to create LP lock: ${e.message}`,'error');
-    document.getElementById('dev-error').textContent=e.message;
+    document.getElementById('dev-error').textContent=e.message||String(e);
   }finally{
     btn.disabled=false; btn.textContent='Create LP Lock';
   }
@@ -647,7 +644,7 @@ async function createLinearLock(){
     const amountWei=ethers.parseUnits(amount, md.decimals);
     const tStart=Date.parse(startTime), tEnd=Date.parse(endTime);
     if (!Number.isFinite(tStart)||!Number.isFinite(tEnd)){ showToast('Invalid start or end time','error'); return; }
-    const startUnix=toUint64(Math.floor(tStart/1000)), endUnix=toUint64(Math.floor(tEnd/1000));
+    const startUnix=Math.floor(tStart/1000), endUnix=Math.floor(tEnd/1000);
     const params=[address, amountWei, startUnix, endUnix, state.account];
 
     const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
@@ -659,13 +656,13 @@ async function createLinearLock(){
     await loadMyLocks(); clearForm('linear');
   }catch(e){
     showToast(`Failed to create linear lock: ${e.message}`,'error');
-    document.getElementById('dev-error').textContent=e.message;
+    document.getElementById('dev-error').textContent=e.message||String(e);
   }finally{
     btn.disabled=false; btn.textContent='Create Linear Lock';
   }
 }
 
-/* -------------------- VALIDATIONS & UTILS -------------------- */
+// validações/util
 function validateInputs(address, amount, unlockTime){
   if (!ethers.isAddress(address)){ showToast('Invalid token address','error'); return false; }
   if (!amount || parseFloat(amount)<=0){ showToast('Invalid amount','error'); return false; }
@@ -697,7 +694,6 @@ function clearForm(type){
   const gasEl=document.getElementById(gasId); if (gasEl) gasEl.style.display='none';
 }
 
-/* -------------------- LOAD / TABLE -------------------- */
 async function loadMyLocks(){
   if (!state.account || !CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)) return;
   try{
@@ -801,12 +797,11 @@ function startCountdownTimers(){
   });
 }
 
-/* -------------------- WITHDRAW -------------------- */
 async function withdrawLock(lockId){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
   try{
-    const tx = await sendViaPopulate('withdraw', [lockId], 150000n);
+    const tx = await sendViaPopulate('withdraw', [lockId], 120000n);
     showToast(`Withdrawal sent: ${tx.hash.slice(0,10)}...`,'info');
     await tx.wait(); showToast('Withdrawal successful!','success');
     await loadMyLocks();
