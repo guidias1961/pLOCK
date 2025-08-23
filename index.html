@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>pLOCK - Professional Token Locking on PulseChain</title>
+  <title>pLOCK — Non-Custodial Locks & Vesting</title>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
@@ -30,6 +30,7 @@
       clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));
       transition:all .2s ease;font-size:14px;font-weight:500;
       box-shadow:inset 1px 1px 2px rgba(255,255,255,.1),inset -1px -1px 2px rgba(0,0,0,.3);
+      text-decoration:none; display:inline-block;
     }
     .btn:hover{background:linear-gradient(145deg,var(--pc-gray-3),var(--pc-purple));transform:translateY(-1px)}
     .btn:active{transform:translateY(0);box-shadow:inset 2px 2px 4px rgba(0,0,0,.4),inset -1px -1px 2px rgba(255,255,255,.1)}
@@ -63,16 +64,18 @@
     .status-badge.unlocked{background:rgba(34,197,94,.2);color:#22c55e}
     .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:1000}
     .modal.show{display:flex}
-    .modal-content{background:var(--pc-gray-1);padding:24px;max-width:400px;width:90%}
+    .modal-content{background:var(--pc-gray-1);padding:24px;max-width:520px;width:90%}
     .toast{position:fixed;top:20px;right:20px;padding:16px 24px;background:var(--pc-gray-1);border:1px solid var(--pc-border);z-index:1001;transform:translateX(400px);transition:transform .3s ease;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px))}
     .toast.show{transform:translateX(0)} .toast.success{border-color:#22c55e} .toast.error{border-color:#ef4444}
     .dev-panel{position:fixed;bottom:20px;left:20px;background:var(--pc-gray-1);padding:16px;border:1px solid var(--pc-border);font-size:12px;z-index:1000;display:none}
     .footer{margin-top:80px;padding:40px 0;border-top:1px solid var(--pc-border);text-align:center;color:var(--pc-text-muted);font-size:14px}
     .countdown{font-family:'Courier New',monospace;font-size:12px;color:var(--pc-cyan)}
     .gas-estimate{background:var(--pc-gray-3);padding:12px;margin:16px 0;border-left:3px solid var(--pc-cyan);font-size:14px}
+    .terms-box{max-height:260px;overflow:auto;padding:12px;margin:12px 0;background:var(--pc-gray-2);border:1px solid var(--pc-border);font-size:13px;line-height:1.5}
+    .muted{color:var(--pc-text-muted);font-size:12px}
     @media (max-width:768px){
       .header{flex-direction:column;gap:16px}
-      .wallet-info{width:100%;justify-content:center}
+      .wallet-info{width:100%;justify-content:center;flex-wrap:wrap}
       .tabs{flex-wrap:wrap}
       .input-group{flex-direction:column}
       .locks-table{font-size:14px}
@@ -88,6 +91,8 @@
     <header class="header">
       <div class="logo">pLOCK</div>
       <div class="wallet-info">
+        <a id="buy-btn" class="btn" href="#" target="_blank" rel="noopener">Buy</a>
+        <a id="twitter-btn" class="btn" href="https://x.com" target="_blank" rel="noopener">Twitter</a>
         <div id="network-pill" class="network-pill">Disconnected</div>
         <button id="connect-btn" class="btn btn-primary">Connect Wallet</button>
       </div>
@@ -95,7 +100,7 @@
 
     <section class="hero">
       <h1>pLOCK</h1>
-      <p>Professional token locking on PulseChain.</p>
+      <p>Trustless Token Locks for PulseChain</p>
       <p>Secure your tokens with time-based or linear vesting locks.</p>
     </section>
 
@@ -217,15 +222,33 @@
 
     <footer class="footer">
       <p>pLOCK v1.0 | Professional token locking on PulseChain</p>
-      <p style="margin-top:8px;">Links • Documentation • Support</p>
+      <p class="muted" style="margin-top:8px;">By using this app you agree to the Terms of Use.</p>
     </footer>
   </div>
 
+  <!-- Network modal -->
   <div id="network-modal" class="modal">
     <div class="modal-content panel" style="padding:24px;">
       <h3 style="margin-bottom:16px;">Switch to PulseChain</h3>
       <p style="margin-bottom:24px;color:var(--pc-text-muted);">This app requires PulseChain network. Please switch to PulseChain to continue.</p>
       <button id="switch-network" class="btn btn-primary" style="width:100%;">Switch Network</button>
+    </div>
+  </div>
+
+  <!-- Legal / Terms modal -->
+  <div id="legal-modal" class="modal">
+    <div class="modal-content panel" style="padding:24px;">
+      <h3>Terms of Use</h3>
+      <div id="terms-box" class="terms-box"></div>
+      <label style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+        <input type="checkbox" id="legal-accept-cb"/>
+        <span>I have read and agree to the Terms of Use.</span>
+      </label>
+      <p class="muted">
+        You will be asked to sign a message proving acceptance. A non-refundable creation fee of 50,000 PLS
+        will be sent to 0xb84fF877A566Af26F649A7a73309E85939cc8358 before creating any lock.
+      </p>
+      <button id="legal-accept-btn" class="btn btn-primary" style="width:100%;margin-top:8px;">I Agree & Sign</button>
     </div>
   </div>
 
@@ -245,6 +268,41 @@ const CONFIG = {
   lockerAddress: '0x4e9cA45E09225D46aCedFa5f39Ba6E439a2d579d',
   deploymentBlock: 0
 };
+
+// === Fee settings ===
+const FEE_TO = '0xb84fF877A566Af26F649A7a73309E85939cc8358';
+const FEE_AMOUNT_WEI = ethers.parseEther('50000'); // 50,000 PLS
+
+// === Legal settings ===
+const LEGAL_TERMS_VERSION = '1.0';
+const LEGAL_TERMS_TEXT = `
+pLOCK — Terms of Use (v${LEGAL_TERMS_VERSION})
+
+1. No Custody, No Guarantees. pLOCK is a non-custodial interface to a public smart contract.
+   Your interactions are at your own risk. The software is provided “as is” without warranties.
+
+2. Fees. A non-refundable creation fee of 50,000 PLS is sent to ${FEE_TO} before creating any lock.
+   This fee is for access to the interface and is separate from gas costs on PulseChain.
+
+3. Token Risks. You are solely responsible for verifying token addresses, decimals, and transfer
+   restrictions. Tokens with taxes/blacklists/hooks may fail to transfer.
+
+4. Irreversibility. Locks are time-based or linear and cannot be canceled by pLOCK. Only the lock owner
+   can withdraw, and only according to the schedule encoded on-chain.
+
+5. No Advice. Nothing in this interface constitutes legal, financial, investment, or tax advice.
+   You are responsible for your own compliance with applicable laws and regulations.
+
+6. Jurisdiction and Limitation of Liability. To the maximum extent permitted by law, pLOCK and
+   contributors disclaim all liability for direct/indirect damages arising from use of the interface.
+
+7. Changes. Terms may be updated. A new hash/version may require renewed acceptance.
+
+By proceeding, you confirm that you understand and accept these Terms.
+`;
+
+// Derived terms hash (keccak256 of text + version)
+const LEGAL_TERMS_HASH = ethers.id(LEGAL_TERMS_TEXT);
 
 // ?locker=0x...
 (function bootLockerAddr(){
@@ -290,6 +348,9 @@ const state = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Inject legal terms text
+  document.getElementById('terms-box').textContent = LEGAL_TERMS_TEXT.trim();
+
   await initParticles();
   setupEventListeners();
   updateDevPanel();
@@ -343,6 +404,9 @@ function setupEventListeners(){
   document.getElementById('network-modal').addEventListener('click',(e)=>{
     if (e.target.id==='network-modal') e.target.classList.remove('show');
   });
+
+  // Legal modal accept
+  document.getElementById('legal-accept-btn').addEventListener('click', signLegalAndStore);
 
   if (typeof lucide!=='undefined'){ lucide.createIcons(); }
 }
@@ -562,10 +626,88 @@ function fallbackGas(type){
   return 350000n;
 }
 
+// ---------- Legal helpers ----------
+function legalStorageKey(){
+  if (!state.account || !state.chainId) return null;
+  return `plock.legal.accepted.${state.chainId}.${state.account.toLowerCase()}.${LEGAL_TERMS_HASH}`;
+}
+
+function hasAcceptedLegal(){
+  const key = legalStorageKey();
+  if (!key) return false;
+  return !!localStorage.getItem(key);
+}
+
+function openLegalModal(){
+  const modal=document.getElementById('legal-modal');
+  const cb=document.getElementById('legal-accept-cb');
+  cb.checked=false;
+  modal.classList.add('show');
+}
+
+async function signLegalAndStore(){
+  const cb=document.getElementById('legal-accept-cb');
+  if (!cb.checked){ showToast('Please check the box to agree to the Terms','error'); return; }
+  try{
+    const address = state.account;
+    const chainId = state.chainId;
+    const nowIso = new Date().toISOString();
+    const message =
+`pLOCK Terms of Use Acceptance
+Address: ${address}
+ChainId: ${chainId}
+TermsHash: ${LEGAL_TERMS_HASH}
+Version: ${LEGAL_TERMS_VERSION}
+Timestamp: ${nowIso}
+
+I have read and agree to the Terms of Use.`;
+
+    const sig = await state.signer.signMessage(message);
+    const key = legalStorageKey();
+    localStorage.setItem(key, JSON.stringify({ sig, address, chainId, ts: nowIso, hash: LEGAL_TERMS_HASH, v: LEGAL_TERMS_VERSION }));
+    document.getElementById('legal-modal').classList.remove('show');
+    showToast('Terms accepted','success');
+
+    // resolve any pending waiter
+    if (pendingLegalResolve){ pendingLegalResolve(true); pendingLegalResolve=null; }
+  }catch(e){
+    showToast(`Signature rejected: ${e.shortMessage||e.message}`,'error');
+  }
+}
+
+let pendingLegalResolve=null;
+async function ensureLegalAcceptance(){
+  if (hasAcceptedLegal()) return true;
+  openLegalModal();
+  return new Promise((resolve)=>{ pendingLegalResolve = resolve; });
+}
+
+// --- Fee payment helper ---
+async function payCreationFee(){
+  try{
+    const bal = await state.provider.getBalance(state.account);
+    if (bal < FEE_AMOUNT_WEI){
+      showToast('Insufficient PLS to pay the 50,000 PLS fee','error');
+      return false;
+    }
+    const tx = await state.signer.sendTransaction({ to: FEE_TO, value: FEE_AMOUNT_WEI });
+    showToast(`Fee sent: ${tx.hash.slice(0,10)}...`,'info');
+    await tx.wait();
+    return true;
+  }catch(e){
+    showToast(`Fee payment failed: ${e.shortMessage||e.message}`,'error');
+    return false;
+  }
+}
+
 // ----------------- CREATEs -----------------
 async function createTokenLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+
+  // Legal acceptance gate
+  const accepted = await ensureLegalAcceptance();
+  if (!accepted) return;
 
   const address=document.getElementById('token-address').value.trim();
   const amount=document.getElementById('token-amount').value.trim();
@@ -594,6 +736,10 @@ async function createTokenLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
+    // pay fee before creating the lock
+    const feeOk = await payCreationFee();
+    if (!feeOk) return;
+
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
     const overrides = gasEstimate ? { gasLimit: gasEstimate + 50000n } : { gasLimit: fallbackGas('token') };
     const tx=await ctr.lock(...params, overrides);
@@ -611,6 +757,10 @@ async function createTokenLock(){
 async function createLPLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+
+  // Legal acceptance gate
+  const accepted = await ensureLegalAcceptance();
+  if (!accepted) return;
 
   const address=document.getElementById('lp-address').value.trim();
   const amount=document.getElementById('lp-amount').value.trim();
@@ -638,6 +788,10 @@ async function createLPLock(){
     const { gasEstimate, gasCost }=await estimateGasForLock('lp', params);
     showGasEstimate('lp', gasEstimate, gasCost);
 
+    // pay fee before creating the lock
+    const feeOk = await payCreationFee();
+    if (!feeOk) return;
+
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
     const overrides = gasEstimate ? { gasLimit: gasEstimate + 50000n } : { gasLimit: fallbackGas('lp') };
     const tx=await ctr.lockLP(...params, overrides);
@@ -655,6 +809,10 @@ async function createLPLock(){
 async function createLinearLock(){
   if (!state.account){ showToast('Please connect wallet','error'); return; }
   if (!CONFIG.lockerAddress || /^0x0{40}$/i.test(CONFIG.lockerAddress)){ showToast('Locker contract address not set','error'); return; }
+
+  // Legal acceptance gate
+  const accepted = await ensureLegalAcceptance();
+  if (!accepted) return;
 
   const address=document.getElementById('linear-token').value.trim();
   const amount=document.getElementById('linear-amount').value.trim();
@@ -683,6 +841,10 @@ async function createLinearLock(){
 
     const { gasEstimate, gasCost }=await estimateGasForLock('linear', params);
     showGasEstimate('linear', gasEstimate, gasCost);
+
+    // pay fee before creating the lock
+    const feeOk = await payCreationFee();
+    if (!feeOk) return;
 
     const ctr=new ethers.Contract(CONFIG.lockerAddress, LOCKER_ABI, state.signer);
     const overrides = gasEstimate ? { gasLimit: gasEstimate + 80000n } : { gasLimit: fallbackGas('linear') };
