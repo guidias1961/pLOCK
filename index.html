@@ -304,7 +304,6 @@ By proceeding, you confirm that you understand and accept these Terms.
 const LEGAL_TERMS_HASH = ethers.id(LEGAL_TERMS_TEXT);
 
 /* =================== Provider Selection ================== */
-// Prefer MetaMask, then Rabby, then Brave (change order if you wish)
 function pickInjectedProvider() {
   const eth = window.ethereum;
   if (!eth) return null;
@@ -370,8 +369,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initParticles();
   setupEventListeners();
   updateDevPanel();
+  // IMPORTANTE: prepara o botão já no load
+  updateWalletUI();
 
-  // Try silent connect on load using chosen provider
+  // Tentativa de conexão silenciosa
   const injectedAtBoot = pickInjectedProvider();
   if (injectedAtBoot){
     try{
@@ -434,6 +435,11 @@ function setupEventListeners(){
   // Legal modal accept
   document.getElementById('legal-accept-btn').addEventListener('click', signLegalAndStore);
 
+  // LIGA o botão Connect/Disconnect já no load
+  document.getElementById('connect-btn').addEventListener('click', ()=>{
+    if (state.account) disconnectWallet(); else connectWallet();
+  });
+
   if (typeof lucide!=='undefined'){ lucide.createIcons(); }
 }
 
@@ -461,7 +467,7 @@ function updateDevPanel(){
 /* ================= Wallet Connect (domain-safe) ================= */
 async function connectWallet(){
   try{
-    // Enforce HTTPS outside localhost
+    // Enforce HTTPS fora de localhost
     if (location.protocol !== 'https:' && location.hostname !== 'localhost'){
       showToast(`Open this app over HTTPS: https://${location.host}${location.pathname}`, 'error');
       return;
@@ -476,7 +482,6 @@ async function connectWallet(){
     state.ethereum = injected;
     const accounts = await injected.request({ method:'eth_requestAccounts' });
 
-    // 'any' avoids provider recreation on chainChanged
     state.provider = new ethers.BrowserProvider(injected, 'any');
     state.signer   = await state.provider.getSigner();
     state.account  = accounts[0] || (await state.signer.getAddress());
@@ -487,7 +492,6 @@ async function connectWallet(){
     await ensurePulseChain();
     updateDevPanel();
 
-    // Re-wire listeners on the chosen provider
     state.ethereum.removeAllListeners?.('accountsChanged');
     state.ethereum.removeAllListeners?.('chainChanged');
     state.ethereum.on?.('accountsChanged', ()=>connectWallet().catch(()=>{}));
@@ -510,12 +514,11 @@ function updateWalletUI(){
   const pill=document.getElementById('network-pill');
   if (state.account){
     btn.textContent=`${state.account.slice(0,6)}...${state.account.slice(-4)}`;
-    btn.onclick=disconnectWallet;
     pill.textContent=state.chainId===CONFIG.chainId?'PulseChain':`Chain ${state.chainId}`;
     pill.className=`network-pill ${state.chainId===CONFIG.chainId?'connected':''}`;
     loadMyLocks();
   }else{
-    btn.textContent='Connect Wallet'; btn.onclick=connectWallet;
+    btn.textContent='Connect Wallet';
     pill.textContent='Disconnected'; pill.className='network-pill';
     renderLocksTable([]);
   }
