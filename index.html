@@ -444,7 +444,6 @@ async function readTokenMeta(address){
   const erc=new ethers.Contract(address, ERC20_ABI, state.provider);
   const [name,symbol,decimals]=await Promise.all([erc.name(),erc.symbol(),erc.decimals()]);
 
-  // tenta reconhecer LP
   let isLP=false, pairInfo=null;
   try{
     const pair=new ethers.Contract(address, PAIR_ABI, state.provider);
@@ -486,21 +485,16 @@ async function setMaxAmount(type){
   }catch{ showToast('Failed to read balance','error'); }
 }
 
-// ---- SAFE APPROVE ROBUSTO ----
 async function safeApprove(tokenAddress, amountWei, spender){
   const c=new ethers.Contract(tokenAddress, ERC20_ABI, state.signer);
   const allowance = await c.allowance(state.account, spender);
-
-  // se já tiver allowance suficiente, não faz nada
   if (allowance >= amountWei) return true;
 
   try{
-    // tenta aprovar MAX direto (mais amigável para futuras operações)
     const tx1 = await c.approve(spender, ethers.MaxUint256);
     await tx1.wait();
     return true;
   }catch(e1){
-    // alguns tokens (USDT-like) exigem zerar antes
     try{
       const txz = await c.approve(spender, 0);
       await txz.wait();
@@ -530,8 +524,8 @@ async function checkPreconditions(tokenAddr, amountStr){
   const needFmt = ethers.formatUnits(amountWei, md.decimals);
   const allFmt = ethers.formatUnits(allowance, md.decimals);
 
-  let ok = true, msgs=[];
-  if (bal < amountWei){ ok=false; msgs.push(`Insufficient balance. You have ${balFmt}, need ${needFmt}.`); }
+  let msgs=[];
+  if (bal < amountWei){ msgs.push(`Insufficient balance. You have ${balFmt}, need ${needFmt}.`); }
   if (allowance < amountWei){ msgs.push(`Allowance for locker is ${allFmt} (need ${needFmt}). Will request approval.`); }
   infoEl.textContent = msgs.join(' ');
   infoEl.style.display = msgs.length ? 'block' : 'none';
@@ -585,22 +579,18 @@ async function createTokenLock(){
     const md = await readTokenMeta(address);
     const amountWei = ethers.parseUnits(amount, md.decimals);
 
-    // pré-checagens
     const pre = await checkPreconditions(address, amount);
     if (!pre.okBalance){ showToast('Insufficient token balance','error'); return; }
 
-    // approvals (se necessário)
     if (!pre.okAllowance){
       const ok = await safeApprove(address, amountWei, CONFIG.lockerAddress);
       if (!ok) return;
     }
 
-    // monta params
     const ts=Date.parse(unlockTime); if (!Number.isFinite(ts)){ showToast('Invalid unlock time','error'); return; }
     const unlockUnix=Math.floor(ts/1000);
     const params=[address, amountWei, unlockUnix, state.account];
 
-    // estima (opcional) e envia
     const { gasEstimate, gasCost }=await estimateGasForLock('token', params);
     showGasEstimate('token', gasEstimate, gasCost);
 
@@ -708,7 +698,6 @@ async function createLinearLock(){
   }
 }
 
-// validações/util
 function validateInputs(address, amount, unlockTime){
   if (!ethers.isAddress(address)){ showToast('Invalid token address','error'); return false; }
   if (!amount || parseFloat(amount)<=0){ showToast('Invalid amount','error'); return false; }
@@ -753,7 +742,8 @@ async function loadMyLocks(){
     const evs=await ctr.queryFilter(f, from, latest);
 
     const locks=evs.map(ev=>{
-      const a=ev.args;
+      const a=ev.args||{};
+      const txHash = ev.transactionHash || ev.log?.transactionHash || '';
       return {
         lockId:Number(a.lockId),
         token:a.token,
@@ -761,7 +751,7 @@ async function loadMyLocks(){
         unlockTime:Number(a.unlockTime),
         owner:a.owner,
         withdrawn:false,
-        txHash:ev.log.transactionHash
+        txHash
       };
     });
 
